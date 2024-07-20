@@ -7,5 +7,5 @@ import (
 func main() {
 	// Setup Logger
 	logger := utils.SetupLogger("./logs", "runtime.log")
-	logger.Println(utils.Create_log_entry("runtime start", "info"))
+	logger.Println(utils.CreateLogEntry("runtime start", "info"))
 }
