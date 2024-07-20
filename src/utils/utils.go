@@ -44,3 +44,10 @@ func SetupLogger(directoryPath string, logName string) *log.Logger {
 	logger := log.New(file, "event: ", log.Ldate|log.Ltime|log.Lshortfile)
 	return logger
 }
+
+func ConsoleAndLoggerOutput(logger *log.Logger, Message string, Event string, ConsoleOut bool) {
+	logger.Println(CreateLogEntry(Message, Event))
+	if ConsoleOut {
+		fmt.Println(CreateLogEntry(Message, Event))
+	}
+}
