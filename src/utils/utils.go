@@ -28,11 +28,12 @@ type Config struct {
 	} `yaml:"http"`
 
 	Configuration struct {
-		LogFileDirectory   string `yaml:"logfiledirectory"`
-		LogFileName        string `yaml:"logfilename"`
-		Stdout             bool   `yaml:"stdout"`
-		HealthCheckTimeout int    `yaml:"healthchecktimeout"`
-		DiscordWebHookURL  string `yaml:"discordwebhook"`
+		LogFileDirectory      string `yaml:"logFileDirectory"`
+		LogFileName           string `yaml:"logFileName"`
+		Stdout                bool   `yaml:"stdOut"`
+		HealthCheckTimeout    int    `yaml:"healthCheckTimeout"`
+		DiscordWebHookDisable bool   `yaml:"discordWebhookDisable"`
+		DiscordWebHookURL     string `yaml:"discordWebhookUrl"`
 	} `yaml:"configuration"`
 }
 
