@@ -3,9 +3,80 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"log"
 	"os"
+	"strings"
 )
+
+type Config struct {
+	ICMP []struct {
+		IP          string   `yaml:"ip"`
+		Hostname    string   `yaml:"hostname"`
+		Timeout     int      `yaml:"timeout"`
+		RetryBuffer int      `yaml:"retrybuffer"`
+		Tags        []string `yaml:"tags"`
+	} `yaml:"icmp"`
+
+	HTTP []struct {
+		FQDN        string   `yaml:"fqdn"`
+		Hostname    string   `yaml:"hostname"`
+		Timeout     int      `yaml:"timeout"`
+		RetryBuffer int      `yaml:"retrybuffer"`
+		SkipVerify  bool     `yaml:"skipverify"`
+		Tags        []string `yaml:"tags"`
+	} `yaml:"http"`
+
+	Configuration struct {
+		LogFileDirectory   string `yaml:"logfiledirectory"`
+		LogFileName        string `yaml:"logfilename"`
+		Stdout             bool   `yaml:"stdout"`
+		HealthCheckTimeout int    `yaml:"healthchecktimeout"`
+		DiscordWebHookURL  string `yaml:"discordwebhook"`
+	} `yaml:"configuration"`
+}
+
+type Message struct {
+	Content string         `json:"content,omitempty"`
+	Embeds  []DiscordEmbed `json:"embeds,omitempty"`
+}
+
+type DiscordEmbed struct {
+	Title       string         `json:"title,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Color       int            `json:"color,omitempty"`
+	Fields      []DiscordField `json:"fields,omitempty"`
+}
+
+type DiscordField struct {
+	Name   string `json:"name,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Inline bool   `json:"inline,omitempty"`
+}
+
+func LoadConfig(filename string) (*Config, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	decoder := yaml.NewDecoder(file)
+	config := &Config{}
+	err = decoder.Decode(config)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+func ParseConfig(pathToConfig string) *Config {
+	config, err := LoadConfig(pathToConfig)
+	if err != nil {
+		panic(err)
+	}
+	return config
+}
 
 type LogEntry struct {
 	Message string `json:"message"`
@@ -19,19 +90,22 @@ func CreateLogEntry(Message string, Event string) string {
 	}
 	jsonData, err := json.Marshal(logEntry)
 	if err != nil {
-		log.Fatalf("Error marshalling to JSON: %v", err)
+		panic(fmt.Sprintf("unable to serialize to json: %v", err))
 	}
-	//Return
 	return string(jsonData)
 }
 
+func FormatTags(tags []string) string {
+	return strings.Join(tags, ", ")
+}
+
 func ValidateLogDirectory(directoryPath string) {
-	fmt.Println(CreateLogEntry(fmt.Sprintf("validating %s directory available... skipping if available", directoryPath), "info"))
+	fmt.Println(CreateLogEntry(fmt.Sprintf("syst ::::: validating %s directory available... skipping if available", directoryPath), "info"))
 	err := os.MkdirAll(directoryPath, os.ModePerm)
 	if err != nil {
-		panic(CreateLogEntry(fmt.Sprintf("unable to create directory: %s", directoryPath), "panic"))
+		panic(CreateLogEntry(fmt.Sprintf("syst ::::: unable to create directory: %s", directoryPath), "panic"))
 	}
-	fmt.Println(CreateLogEntry(fmt.Sprintf("validated %s directory is available", directoryPath), "info"))
+	fmt.Println(CreateLogEntry(fmt.Sprintf("syst ::::: validated %s directory is available", directoryPath), "info"))
 }
 
 func SetupLogger(directoryPath string, logName string) *log.Logger {
@@ -39,7 +113,7 @@ func SetupLogger(directoryPath string, logName string) *log.Logger {
 	logFilePath := fmt.Sprintf("%s/runtime.log", directoryPath)
 	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(CreateLogEntry(fmt.Sprintf("unable to open log file: %s", logFilePath), "panic"))
+		panic(CreateLogEntry(fmt.Sprintf("syst ::::: unable to open log file: %s", logFilePath), "panic"))
 	}
 	logger := log.New(file, "event: ", log.Ldate|log.Ltime|log.Lshortfile)
 	return logger
