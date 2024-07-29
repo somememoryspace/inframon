@@ -64,6 +64,11 @@ type Taskette struct {
 	Statistic string
 }
 
+type LogEntry struct {
+	Message string `json:"message"`
+	Event   string `json:"event"`
+}
+
 func LoadConfig(filename string) (*Config, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -86,11 +91,6 @@ func ParseConfig(pathToConfig string) *Config {
 		panic(err)
 	}
 	return config
-}
-
-type LogEntry struct {
-	Message string `json:"message"`
-	Event   string `json:"event"`
 }
 
 func CreateLogEntry(Message string, Event string) string {
@@ -132,6 +132,7 @@ func SetupLogger(directoryPath string, logName string) *log.Logger {
 func ConsoleAndLoggerOutput(logger *log.Logger, Message string, Event string, ConsoleOut bool) {
 	logger.Println(CreateLogEntry(Message, Event))
 	if ConsoleOut {
-		fmt.Println(CreateLogEntry(Message, Event))
+		CreateLogEntry(Message, Event)
+		fmt.Printf("message: %s ::::: event: %s \n", Message, Event)
 	}
 }
