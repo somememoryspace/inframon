@@ -55,6 +55,15 @@ type DiscordField struct {
 	Inline bool   `json:"inline,omitempty"`
 }
 
+type Taskette struct {
+	Name      string
+	Address   string
+	Protocol  string
+	Status    bool
+	Tags      []string
+	Statistic string
+}
+
 func LoadConfig(filename string) (*Config, error) {
 	file, err := os.Open(filename)
 	if err != nil {

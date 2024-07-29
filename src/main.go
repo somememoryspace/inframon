@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,96 +18,89 @@ import (
 )
 
 var (
-	CONFIG = utils.ParseConfig("./config/config.yaml")
-	LOGGER = utils.SetupLogger(CONFIG.Configuration.LogFileDirectory, CONFIG.Configuration.LogFileName)
-
+	CONFIG     = utils.ParseConfig("./config/config.yaml")
+	STDOUT     = CONFIG.Configuration.Stdout
+	LOGGER     = utils.SetupLogger(CONFIG.Configuration.LogFileDirectory, CONFIG.Configuration.LogFileName)
+	mutex      sync.Mutex
 	ICMPHEALTH = make(map[string]bool)
 	HTTPHEALTH = make(map[string]bool)
-	STATUSMAP  = make(map[string]bool)
-
-	STDOUT            = CONFIG.Configuration.Stdout
-	DISCORDISABLED    = CONFIG.Configuration.DiscordWebHookDisable
-	DISCORDWEBHOOKURL = CONFIG.Configuration.DiscordWebHookURL
-	HEALTHCHECKTIME   = CONFIG.Configuration.HealthCheckTimeout
-
-	MUTEX sync.Mutex
 )
 
 func setICMPHealth(ip string, value bool) {
-	MUTEX.Lock()
-	defer MUTEX.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	ICMPHEALTH[ip] = value
 }
 
 func getICMPHealth(ip string) bool {
-	MUTEX.Lock()
-	defer MUTEX.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	return ICMPHEALTH[ip]
 }
 
 func setHTTPHealth(fqdn string, value bool) {
-	MUTEX.Lock()
-	defer MUTEX.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	HTTPHEALTH[fqdn] = value
 }
 
 func getHTTPHealth(fqdn string) bool {
-	MUTEX.Lock()
-	defer MUTEX.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	return HTTPHEALTH[fqdn]
 }
 
-func pingICMP(address string, retryBuffer int) time.Duration {
-	consecutiveFailures := 0
-
-	for {
-		pinger, err := ping.NewPinger(address)
-		if err != nil {
-			utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: could not connect to address: (%s)", address), "error", STDOUT)
-			setICMPHealth(address, false)
-		} else {
-			pinger.Count = 1
-			pinger.Timeout = 2 * time.Second
-			err = pinger.Run()
-			if err != nil {
-				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: could not connect to address: (%s)", address), "error", STDOUT)
-				setICMPHealth(address, false)
-			} else {
-				consecutiveFailures = 0
-				stats := pinger.Statistics()
-				return stats.AvgRtt
-			}
-		}
-
-		consecutiveFailures++
-		if consecutiveFailures > retryBuffer {
-			return 0
-		}
-		time.Sleep(1 * time.Second)
-	}
-}
-
-func pingTaskICMP(ip, hostname string, tags []string, timeout int, wg *sync.WaitGroup, retrybuffer int) {
+func pingICMP(address string, wg *sync.WaitGroup) time.Duration {
+	wg.Add(1)
 	defer wg.Done()
+	pinger, err := ping.NewPinger(address)
+	if err != nil {
+		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: could not connect to address: (%s)", address), "error", STDOUT)
+		return 0
+	}
+	pinger.Count = 1
+	pinger.Timeout = 2 * time.Second
+	err = pinger.Run()
+	if err != nil {
+		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: could not connect to address: (%s)", address), "error", STDOUT)
+		return 0
+	}
+	stats := pinger.Statistics()
+	return stats.AvgRtt
+}
+
+func pingTaskICMP(ip string, hostname string, tags []string, retryBuffer int, timeout int, wg *sync.WaitGroup, discordWebhookURL string) {
+	wg.Add(1)
+	defer wg.Done()
+	consecutiveFailures := 0
 	for {
-		latency := pingICMP(ip, retrybuffer)
+		latency := pingICMP(ip, wg)
 		if latency == 0 {
-			if setStatusAndCheckIfAlreadySent(hostname, "ICMP [BROKEN]", false) {
-				discordWebhookFailure(hostname, "N/A", tags, "ICMP [BROKEN]")
+			if getICMPHealth(ip) {
+				consecutiveFailures++
+				if consecutiveFailures > retryBuffer {
+					utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: could not connect to address: (%s)", ip), "error", STDOUT)
+					setICMPHealth(ip, false)
+					sendToDiscordWebhookFailure(discordWebhookURL, hostname, "N/A", tags, "ICMP [BROKEN]")
+				}
+				time.Sleep(1 * time.Second)
+				continue
 			}
 		} else {
-			if setStatusAndCheckIfAlreadySent(hostname, fmt.Sprintf("ICMP latency %v", latency), true) {
-				discordWebhookSuccess(hostname, "N/A", tags, fmt.Sprintf("ICMP latency %v", latency))
+			if !getICMPHealth(ip) {
+				setICMPHealth(ip, true)
 			}
+			utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: %s (%s) (%s) ::::: latency %v", hostname, ip, utils.FormatTags(tags), latency), "info", STDOUT)
+			time.Sleep(time.Duration(timeout) * time.Second)
 		}
-		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: %s (%s) (%s) ::::: latency %v", hostname, ip, utils.FormatTags(tags), latency), "info", STDOUT)
-		time.Sleep(time.Duration(timeout) * time.Second)
+		consecutiveFailures = 0
 	}
 }
 
-func pingHTTP(hostname string, retryBuffer int, skipverify bool) (int, error) {
+func pingHTTP(hostname string, retryBuffer int, skipverify bool, wg *sync.WaitGroup) (int, error) {
+	wg.Add(2)
+	defer wg.Done()
 	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: skipverify},
 		},
@@ -121,69 +113,51 @@ func pingHTTP(hostname string, retryBuffer int, skipverify bool) (int, error) {
 		}
 		resp, err := httpClient.Get(hostname)
 		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("http ::::: timeout connecting to address: (%s)", hostname), "error", STDOUT)
-			} else {
-				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("http ::::: could not connect to address: (%s)", hostname), "error", STDOUT)
-			}
+			utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("http ::::: could not connect to address: (%s)", hostname), "error", STDOUT)
 			setHTTPHealth(hostname, false)
-		} else {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 && resp.StatusCode != 201 && resp.StatusCode != 204 {
-				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("http ::::: received non-success status code (%d) for (%s)", resp.StatusCode, hostname), "error", STDOUT)
-				setHTTPHealth(hostname, false)
-				return resp.StatusCode, fmt.Errorf("http error: %s, ::::: [%s]", hostname, resp.Status)
+			consecutiveFailures++
+			if consecutiveFailures > retryBuffer {
+				return 0, err
 			}
-			setHTTPHealth(hostname, true)
-			consecutiveFailures = 0
-			return resp.StatusCode, nil
+			time.Sleep(1 * time.Second)
+			continue
 		}
 
-		consecutiveFailures++
-		if consecutiveFailures > retryBuffer {
-			return 0, fmt.Errorf("maximum retries reached for %s", hostname)
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 && resp.StatusCode != 201 && resp.StatusCode != 204 {
+			utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("http ::::: received non-success status code (%d) for (%s)", resp.StatusCode, hostname), "error", STDOUT)
+			setHTTPHealth(hostname, false)
+			consecutiveFailures++
+			if consecutiveFailures > retryBuffer {
+				return resp.StatusCode, fmt.Errorf("http error: %s, ::::: [%s]", hostname, resp.Status)
+			}
+			time.Sleep(1 * time.Second)
+			continue
 		}
-		time.Sleep(1 * time.Second)
+		setHTTPHealth(hostname, true)
+		consecutiveFailures = 0
+		return resp.StatusCode, nil
 	}
 }
 
-func pingTaskHTTP(fqdn string, tags []string, timeout int, wg *sync.WaitGroup, retrybuffer int, skipverify bool) {
+func pingTaskHTTP(fqdn string, tags []string, timeout int, wg *sync.WaitGroup, discordWebhookURL string, retrybuffer int, skipverify bool) {
 	defer wg.Done()
 	for {
-		respCode, err := pingHTTP(fqdn, retrybuffer, skipverify)
+		respCode, err := pingHTTP(fqdn, retrybuffer, skipverify, wg)
 		if err != nil && respCode != 0 {
-			if setStatusAndCheckIfAlreadySent(fqdn, fmt.Sprintf("HTTP [%v]", respCode), false) {
-				discordWebhookFailure("N/A", fqdn, tags, fmt.Sprintf("HTTP [%v]", respCode))
-			}
+			sendToDiscordWebhookFailure(discordWebhookURL, "N/A", fqdn, tags, fmt.Sprintf("HTTP [%v]", respCode))
 		}
 		if respCode == 0 {
-			if setStatusAndCheckIfAlreadySent(fqdn, "HTTP [UNREACHABLE]", false) {
-				discordWebhookFailure("N/A", fqdn, tags, "HTTP [UNREACHABLE]")
-			}
-		} else {
-			if setStatusAndCheckIfAlreadySent(fqdn, fmt.Sprintf("HTTP [%v]", respCode), true) {
-				discordWebhookSuccess("N/A", fqdn, tags, fmt.Sprintf("HTTP [%v]", respCode))
-			}
+			sendToDiscordWebhookFailure(discordWebhookURL, "N/A", fqdn, tags, "HTTP [UNREACHABLE]")
 		}
 		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("http ::::: %s (%s) ::: [%v]", fqdn, utils.FormatTags(tags), respCode), "info", STDOUT)
 		time.Sleep(time.Duration(timeout) * time.Second)
 	}
 }
 
-func setStatusAndCheckIfAlreadySent(key, status string, currentStatus bool) bool {
-	MUTEX.Lock()
-	defer MUTEX.Unlock()
-	prevStatus, exists := STATUSMAP[key]
-	if exists && prevStatus == currentStatus {
-		return false
-	}
-	STATUSMAP[key] = currentStatus
-	return true
-}
-
-func discordWebhookFailure(hostname string, fqdn string, tags []string, errorMessage string) {
+func sendToDiscordWebhookFailure(webhookURL string, hostname string, fqdn string, tags []string, errorMessage string) {
 	embed := utils.DiscordEmbed{
-		Title:       "Service Unreachable",
+		Title:       "Unable to Connect",
 		Description: errorMessage,
 		Color:       0xFF0000,
 		Fields: []utils.DiscordField{
@@ -209,90 +183,46 @@ func discordWebhookFailure(hostname string, fqdn string, tags []string, errorMes
 			},
 			{
 				Name:   "Tags",
-				Value:  strings.Join(tags, ", "),
+				Value:  string(utils.FormatTags(tags)),
 				Inline: true,
 			},
 		},
 	}
 	message := utils.Message{
 		Embeds: []utils.DiscordEmbed{embed},
-	}
-	sendDiscordWebhook(message)
-}
-
-func discordWebhookSuccess(hostname string, fqdn string, tags []string, successMessage string) {
-	embed := utils.DiscordEmbed{
-		Title:       "Service Active",
-		Description: successMessage,
-		Color:       0x00FF00,
-		Fields: []utils.DiscordField{
-			{
-				Name:   "Hostname",
-				Value:  hostname,
-				Inline: true,
-			},
-			{
-				Name:   "FQDN",
-				Value:  fqdn,
-				Inline: true,
-			},
-			{
-				Name:   "Date",
-				Value:  time.Now().Format("2006-01-02"),
-				Inline: true,
-			},
-			{
-				Name:   "Time",
-				Value:  time.Now().Format("15:04:05"),
-				Inline: true,
-			},
-			{
-				Name:   "Tags",
-				Value:  strings.Join(tags, ", "),
-				Inline: true,
-			},
-		},
-	}
-	message := utils.Message{
-		Embeds: []utils.DiscordEmbed{embed},
-	}
-	sendDiscordWebhook(message)
-}
-
-func sendDiscordWebhook(message utils.Message) {
-	if DISCORDISABLED {
-		utils.ConsoleAndLoggerOutput(LOGGER, "syst ::::: discord webhook service disabled", "info", STDOUT)
-		return
 	}
 	jsonPayload, err := json.Marshal(message)
 	if err != nil {
 		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("syst ::::: error marshalling json: %v", err), "error", STDOUT)
 		return
 	}
-	resp, err := http.Post(DISCORDWEBHOOKURL, "application/json", bytes.NewBuffer(jsonPayload))
+	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("syst ::::: error sending discord webhook status code: [%d]", resp.StatusCode), "error", STDOUT)
+		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("syst ::::: error sending Discord webhook: %v", err), "error", STDOUT)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 204 {
-		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("syst ::::: error sending discord webhook status code: [%d]", resp.StatusCode), "error", STDOUT)
+		utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("syst ::::: unexpected status code: [%d]", resp.StatusCode), "error", STDOUT)
 		return
 	}
 	utils.ConsoleAndLoggerOutput(LOGGER, "syst ::::: message sent successfully to discord webhook", "info", STDOUT)
 }
 
 func healthCheck(timeout int, wg *sync.WaitGroup) {
-	defer wg.Done()
 	for {
 		for ip := range ICMPHEALTH {
 			if !getICMPHealth(ip) {
 				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: health for %s ::::: failing", ip), "info", STDOUT)
+			} else {
+				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: health for %s ::::: passing", ip), "info", STDOUT)
 			}
 		}
 		for fqdn := range HTTPHEALTH {
 			if !getHTTPHealth(fqdn) {
 				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("http ::::: health for %s ::::: failing", fqdn), "info", STDOUT)
+			} else {
+				utils.ConsoleAndLoggerOutput(LOGGER, fmt.Sprintf("icmp ::::: health for %s ::::: passing", fqdn), "info", STDOUT)
 			}
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
@@ -304,22 +234,26 @@ func main() {
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 	var wg sync.WaitGroup
+	// Setup Health Checks
 	for _, icmp := range CONFIG.ICMP {
 		setICMPHealth(icmp.IP, true)
 	}
 	for _, http := range CONFIG.HTTP {
 		setHTTPHealth(http.FQDN, true)
 	}
+	// Run ICMP Checks
 	for _, icmp := range CONFIG.ICMP {
 		wg.Add(1)
-		go pingTaskICMP(icmp.IP, icmp.Hostname, icmp.Tags, icmp.Timeout, &wg, icmp.RetryBuffer)
+		go pingTaskICMP(icmp.IP, icmp.Hostname, icmp.Tags, icmp.RetryBuffer, icmp.Timeout, &wg, CONFIG.Configuration.DiscordWebHookURL)
 	}
+	// Run HTTP Checks
 	for _, http := range CONFIG.HTTP {
 		wg.Add(1)
-		go pingTaskHTTP(http.FQDN, http.Tags, http.Timeout, &wg, http.RetryBuffer, http.SkipVerify)
+		go pingTaskHTTP(http.FQDN, http.Tags, http.Timeout, &wg, CONFIG.Configuration.DiscordWebHookURL, http.RetryBuffer, http.SkipVerify)
 	}
+	// Run HealthChecks
 	wg.Add(1)
-	go healthCheck(HEALTHCHECKTIME, &wg)
+	go healthCheck(CONFIG.Configuration.HealthCheckTimeout, &wg)
 	<-signalChannel
 	utils.ConsoleAndLoggerOutput(LOGGER, "syst ::::: termination signal received. exiting...", "info", STDOUT)
 }
