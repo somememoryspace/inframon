@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  inframon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - type: bind
+        source: ./path/to/config/file
+        target: /inframon/config
+    command: ["./inframon", "-config", "/inframon/config/config.yaml"]
