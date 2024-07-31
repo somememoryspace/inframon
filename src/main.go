@@ -97,7 +97,7 @@ func pingTaskICMP(address string, service string, retryBuffer int, timeout int, 
 				consecutiveFailures++
 				if consecutiveFailures > retryBuffer {
 					setHealthStatus(ICMPHEALTH, address, false)
-					sendToDiscordWebhook(discordWebhookURL, "Connection Interrupted", "ICMP :: KO", 0xFF0000, address, service, networkZone, instanceType)
+					sendToDiscordWebhook(discordWebhookURL, "Connection Interrupted", "ICMP :: KO", 0xFF0000, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
 					sendSMTPMail(CONFIG, "Connection Interrupted", fmt.Sprintf("ICMP :: KO :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency))
 				}
 			}
@@ -105,7 +105,7 @@ func pingTaskICMP(address string, service string, retryBuffer int, timeout int, 
 			utils.ConsoleAndLoggerOutput(LOGGER, "  icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "info", STDOUT)
 			if !getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, true)
-				sendToDiscordWebhook(discordWebhookURL, "Connection Established", "ICMP :: OK", 0x00FF00, address, service, networkZone, instanceType)
+				sendToDiscordWebhook(discordWebhookURL, "Connection Established", "ICMP :: OK", 0x00FF00, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
 				sendSMTPMail(CONFIG, "Connection Established", fmt.Sprintf("ICMP :: OK :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency))
 			}
 			consecutiveFailures = 0
@@ -125,7 +125,7 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 				consecutiveFailures++
 				if consecutiveFailures > retryBuffer {
 					setHealthStatus(HTTPHEALTH, address, false)
-					sendToDiscordWebhook(discordWebhookURL, "Connection Interrupted", "HTTP :: KO", 0xFF0000, address, service, networkZone, instanceType)
+					sendToDiscordWebhook(discordWebhookURL, "Connection Interrupted", "HTTP :: KO", 0xFF0000, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
 					sendSMTPMail(CONFIG, "Connection Interrupted", fmt.Sprintf("HTTP :: KO :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode))
 				}
 			}
@@ -133,7 +133,7 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 			utils.ConsoleAndLoggerOutput(LOGGER, "  http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "info", STDOUT)
 			if !getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, true)
-				sendToDiscordWebhook(discordWebhookURL, "Connection Established", "HTTP :: OK", 0x00FF00, address, service, networkZone, instanceType)
+				sendToDiscordWebhook(discordWebhookURL, "Connection Established", "HTTP :: OK", 0x00FF00, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
 				sendSMTPMail(CONFIG, "Connection Established", fmt.Sprintf("HTTP :: OK :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode))
 			}
 			consecutiveFailures = 0
@@ -162,11 +162,7 @@ func pingHTTP(address string, service string, skipVerify bool) (int, error) {
 	return resp.StatusCode, nil
 }
 
-func sendToDiscordWebhook(webhookURL, title, description string, color int, address string, service string, networkZone string, instanceType string) {
-	sendToDiscordWebhookWithRetry(webhookURL, title, description, color, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
-}
-
-func sendToDiscordWebhookWithRetry(webhookURL, title, description string, color int, address string, service string, networkZone string, instanceType string, retryCount int, rateLimitResetTime time.Duration, maxRetries int) {
+func sendToDiscordWebhook(webhookURL, title, description string, color int, address string, service string, networkZone string, instanceType string, retryCount int, rateLimitResetTime time.Duration, maxRetries int) {
 	if DISCORDDISABLE {
 		utils.ConsoleAndLoggerOutput(LOGGER, "system", "discord webhook notifications disabled", "info", STDOUT)
 		return
