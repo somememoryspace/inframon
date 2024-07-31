@@ -249,6 +249,26 @@ func sendSMTPMail(config *utils.Config, subject, body string) error {
 	return nil
 }
 
+func healthCheck(timeout int) {
+	for {
+		for address := range ICMPHEALTH {
+			status := "PASS"
+			if !getHealthStatus(ICMPHEALTH, address) {
+				status = "FAIL"
+			}
+			utils.ConsoleAndLoggerOutput(LOGGER, "  icmp", fmt.Sprintf("health[%s] :: address[%s]", status, address), "info", STDOUT)
+		}
+		for address := range HTTPHEALTH {
+			status := "PASS"
+			if !getHealthStatus(HTTPHEALTH, address) {
+				status = "FAIL"
+			}
+			utils.ConsoleAndLoggerOutput(LOGGER, "  http", fmt.Sprintf("health[%s] :: address[%s]", status, address), "info", STDOUT)
+		}
+		time.Sleep(time.Duration(timeout) * time.Second)
+	}
+}
+
 func main() {
 	utils.ConsoleAndLoggerOutput(LOGGER, "system", "starting inframon system", "info", STDOUT)
 
@@ -257,14 +277,16 @@ func main() {
 	for _, icmpConfig := range CONFIG.ICMP {
 		setHealthStatus(ICMPHEALTH, icmpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskICMP(icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, HEALTHCHECKTIMEOUT, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
+		go pingTaskICMP(icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, icmpConfig.Timeout, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
 	}
 
 	for _, httpConfig := range CONFIG.HTTP {
 		setHealthStatus(HTTPHEALTH, httpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskHTTP(httpConfig.Address, httpConfig.Service, httpConfig.RetryBuffer, HEALTHCHECKTIMEOUT, httpConfig.SkipVerify, httpConfig.NetworkZone, httpConfig.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
+		go pingTaskHTTP(httpConfig.Address, httpConfig.Service, httpConfig.RetryBuffer, httpConfig.Timeout, httpConfig.SkipVerify, httpConfig.NetworkZone, httpConfig.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
 	}
+	wg.Add(1)
+	go healthCheck(HEALTHCHECKTIMEOUT)
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
