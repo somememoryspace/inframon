@@ -156,6 +156,7 @@ func ValidateICMPConfig(icmpConfig []struct {
 	NetworkZone  string `yaml:"networkZone"`
 	InstanceType string `yaml:"instanceType"`
 }) error {
+	addresses := make(map[string]bool)
 	for i, icmp := range icmpConfig {
 		if icmp.Address == "" {
 			return fmt.Errorf("icmp config at index %d has empty address", i)
@@ -175,6 +176,10 @@ func ValidateICMPConfig(icmpConfig []struct {
 		if icmp.InstanceType == "" {
 			return fmt.Errorf("icmp config at index %d has empty instanceType", i)
 		}
+		if _, exists := addresses[icmp.Address]; exists {
+			return fmt.Errorf("icmp config at index %d has duplicate address: %s", i, icmp.Address)
+		}
+		addresses[icmp.Address] = true
 	}
 	return nil
 }
@@ -188,6 +193,7 @@ func ValidateHTTPConfig(httpConfig []struct {
 	NetworkZone  string `yaml:"networkZone"`
 	InstanceType string `yaml:"instanceType"`
 }) error {
+	addresses := make(map[string]bool)
 	for i, http := range httpConfig {
 		if http.Address == "" {
 			return fmt.Errorf("http config at index %d has empty address", i)
@@ -207,6 +213,10 @@ func ValidateHTTPConfig(httpConfig []struct {
 		if http.InstanceType == "" {
 			return fmt.Errorf("http config at index %d has empty instanceType", i)
 		}
+		if _, exists := addresses[http.Address]; exists {
+			return fmt.Errorf("http config at index %d has duplicate address: %s", i, http.Address)
+		}
+		addresses[http.Address] = true
 	}
 	return nil
 }

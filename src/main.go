@@ -92,22 +92,22 @@ func pingTaskICMP(address string, service string, retryBuffer int, timeout int, 
 	for {
 		latency := pingICMP(address)
 		if latency == 0 {
+			utils.ConsoleAndLoggerOutput(LOGGER, "  icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "error", STDOUT)
 			if getHealthStatus(ICMPHEALTH, address) {
 				consecutiveFailures++
 				if consecutiveFailures > retryBuffer {
-					utils.ConsoleAndLoggerOutput(LOGGER, "  icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "error", STDOUT)
 					setHealthStatus(ICMPHEALTH, address, false)
 					sendToDiscordWebhook(discordWebhookURL, "Connection Interrupted", "ICMP :: KO", 0xFF0000, address, service, networkZone, instanceType)
 					sendSMTPMail(CONFIG, "Connection Interrupted", fmt.Sprintf("ICMP :: KO :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency))
 				}
 			}
 		} else {
+			utils.ConsoleAndLoggerOutput(LOGGER, "  icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "info", STDOUT)
 			if !getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, true)
 				sendToDiscordWebhook(discordWebhookURL, "Connection Established", "ICMP :: OK", 0x00FF00, address, service, networkZone, instanceType)
 				sendSMTPMail(CONFIG, "Connection Established", fmt.Sprintf("ICMP :: OK :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency))
 			}
-			utils.ConsoleAndLoggerOutput(LOGGER, "  icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "info", STDOUT)
 			consecutiveFailures = 0
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
@@ -120,22 +120,22 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 	for {
 		respCode, err := pingHTTP(address, service, skipVerify)
 		if err != nil || respCode == 0 {
+			utils.ConsoleAndLoggerOutput(LOGGER, "  http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "error", STDOUT)
 			if getHealthStatus(HTTPHEALTH, address) {
 				consecutiveFailures++
 				if consecutiveFailures > retryBuffer {
-					utils.ConsoleAndLoggerOutput(LOGGER, "  http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "error", STDOUT)
 					setHealthStatus(HTTPHEALTH, address, false)
 					sendToDiscordWebhook(discordWebhookURL, "Connection Interrupted", "HTTP :: KO", 0xFF0000, address, service, networkZone, instanceType)
 					sendSMTPMail(CONFIG, "Connection Interrupted", fmt.Sprintf("HTTP :: KO :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode))
 				}
 			}
 		} else if respCode == 200 || respCode == 201 || respCode == 204 {
+			utils.ConsoleAndLoggerOutput(LOGGER, "  http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "info", STDOUT)
 			if !getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, true)
 				sendToDiscordWebhook(discordWebhookURL, "Connection Established", "HTTP :: OK", 0x00FF00, address, service, networkZone, instanceType)
 				sendSMTPMail(CONFIG, "Connection Established", fmt.Sprintf("HTTP :: OK :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode))
 			}
-			utils.ConsoleAndLoggerOutput(LOGGER, "  http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "info", STDOUT)
 			consecutiveFailures = 0
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
@@ -163,6 +163,10 @@ func pingHTTP(address string, service string, skipVerify bool) (int, error) {
 }
 
 func sendToDiscordWebhook(webhookURL, title, description string, color int, address string, service string, networkZone string, instanceType string) {
+	sendToDiscordWebhookWithRetry(webhookURL, title, description, color, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
+}
+
+func sendToDiscordWebhookWithRetry(webhookURL, title, description string, color int, address string, service string, networkZone string, instanceType string, retryCount int, rateLimitResetTime time.Duration, maxRetries int) {
 	if DISCORDDISABLE {
 		utils.ConsoleAndLoggerOutput(LOGGER, "system", "discord webhook notifications disabled", "info", STDOUT)
 		return
@@ -183,22 +187,43 @@ func sendToDiscordWebhook(webhookURL, title, description string, color int, addr
 	message := utils.Message{
 		Embeds: []utils.DiscordEmbed{embed},
 	}
-	jsonPayload, err := json.Marshal(message)
+	payload, err := json.Marshal(message)
 	if err != nil {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("could not marshal json :: error[%v]", err), "error", STDOUT)
+		utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("failed to marshal discord webhook payload: %v", err), "error", STDOUT)
 		return
 	}
-	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("could not send discord webhook :: error[%v]", err), "error", STDOUT)
-		return
+
+	for i := 0; i <= maxRetries; i++ {
+		req, err := http.NewRequest("POST", webhookURL, bytes.NewBuffer(payload))
+		if err != nil {
+			utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("failed to create discord webhook request: %v", err), "error", STDOUT)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("failed to send discord webhook request: %v", err), "error", STDOUT)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusTooManyRequests {
+				if retryCount < maxRetries {
+					retryCount++
+					utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("rate limited by Discord, retrying in %v seconds... [Attempt %d/%d]", rateLimitResetTime.Seconds(), retryCount, maxRetries), "info", STDOUT)
+					time.Sleep(rateLimitResetTime)
+					continue
+				} else {
+					utils.ConsoleAndLoggerOutput(LOGGER, "system", "max retries reached, aborting...", "error", STDOUT)
+				}
+			} else if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+				utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("discord webhook returned non-success status: [%v]", resp.Status), "error", STDOUT)
+			} else {
+				utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("discord webhook notification sent successfully: [%v]", resp.StatusCode), "info", STDOUT)
+			}
+		}
+		break
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 204 {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("unexpected :: code[%d]", resp.StatusCode), "error", STDOUT)
-		return
-	}
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", "message sent successfully to discord webhook", "info", STDOUT)
 }
 
 func sendSMTPMail(config *utils.Config, subject, body string) error {
@@ -228,47 +253,30 @@ func sendSMTPMail(config *utils.Config, subject, body string) error {
 	return nil
 }
 
-func healthCheck(timeout int) {
-	for {
-		for address := range ICMPHEALTH {
-			status := "PASS"
-			if !getHealthStatus(ICMPHEALTH, address) {
-				status = "FAIL"
-			}
-			utils.ConsoleAndLoggerOutput(LOGGER, "  icmp", fmt.Sprintf("health[%s] :: address[%s]", status, address), "info", STDOUT)
-		}
-		for address := range HTTPHEALTH {
-			status := "PASS"
-			if !getHealthStatus(HTTPHEALTH, address) {
-				status = "FAIL"
-			}
-			utils.ConsoleAndLoggerOutput(LOGGER, "  http", fmt.Sprintf("health[%s] :: address[%s]", status, address), "info", STDOUT)
-		}
-		time.Sleep(time.Duration(timeout) * time.Second)
-	}
-}
-
 func main() {
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", "runtime start", "info", STDOUT)
-	signalChannel := make(chan os.Signal, 1)
-	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
+	utils.ConsoleAndLoggerOutput(LOGGER, "system", "starting inframon system", "info", STDOUT)
+
 	var wg sync.WaitGroup
-	for _, icmp := range CONFIG.ICMP {
-		setHealthStatus(ICMPHEALTH, icmp.Address, true)
-	}
-	for _, http := range CONFIG.HTTP {
-		setHealthStatus(HTTPHEALTH, http.Address, true)
-	}
-	for _, icmp := range CONFIG.ICMP {
+
+	for _, icmpConfig := range CONFIG.ICMP {
+		setHealthStatus(ICMPHEALTH, icmpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskICMP(icmp.Address, icmp.Service, icmp.RetryBuffer, icmp.Timeout, icmp.NetworkZone, icmp.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
+		go pingTaskICMP(icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, HEALTHCHECKTIMEOUT, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
 	}
-	for _, http := range CONFIG.HTTP {
+
+	for _, httpConfig := range CONFIG.HTTP {
+		setHealthStatus(HTTPHEALTH, httpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskHTTP(http.Address, http.Service, http.RetryBuffer, http.Timeout, http.SkipVerify, http.NetworkZone, http.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
+		go pingTaskHTTP(httpConfig.Address, httpConfig.Service, httpConfig.RetryBuffer, HEALTHCHECKTIMEOUT, httpConfig.SkipVerify, httpConfig.NetworkZone, httpConfig.InstanceType, &wg, CONFIG.Configuration.DiscordWebHookURL)
 	}
-	wg.Add(1)
-	go healthCheck(HEALTHCHECKTIMEOUT)
-	<-signalChannel
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", "termination signal received :: exiting...", "info", STDOUT)
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signalChan
+		utils.ConsoleAndLoggerOutput(LOGGER, "system", "shutting down inframon system", "info", STDOUT)
+		os.Exit(0)
+	}()
+
+	wg.Wait()
 }
