@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/mail"
 	"os"
+	"time"
 )
 
 type Config struct {
@@ -119,6 +120,8 @@ func SetupLogger(directoryPath string, logName string) *log.Logger {
 }
 
 func ConsoleAndLoggerOutput(logger *log.Logger, Type string, Message string, Event string, ConsoleOut bool) {
+	currentTime := time.Now()
+	formattedTime := currentTime.Format("2006-01-02 15:04:05")
 	logEntry, err := CreateLogEntry(Type, Message, Event)
 	if err != nil {
 		fmt.Printf("system ::::: runtime[LOG] :: error creating log entry: %v\n", err)
@@ -126,7 +129,7 @@ func ConsoleAndLoggerOutput(logger *log.Logger, Type string, Message string, Eve
 	}
 	logger.Println(logEntry)
 	if ConsoleOut {
-		fmt.Printf("message: %s ::::: %s ::::: event: %s \n", Type, Message, Event)
+		fmt.Printf("%s ::::: message: %s ::::: %s ::::: event: %s \n", formattedTime, Type, Message, Event)
 	}
 }
 
