@@ -99,12 +99,12 @@ func CreateLogEntry(Type string, Message string, Event string) (string, error) {
 }
 
 func ValidateLogDirectory(directoryPath string) {
-	fmt.Printf("message: system ::::: validating %s directory available... skipping if available\n", directoryPath)
+	fmt.Printf("message: system ::::: runtime[LOG] :: validating %s directory available... skipping if available\n", directoryPath)
 	err := os.MkdirAll(directoryPath, os.ModePerm)
 	if err != nil {
-		panic(fmt.Sprintf("message: system ::::: unable to create directory: %s", directoryPath))
+		panic(fmt.Sprintf("message: system ::::: runtime[LOG] :: unable to create directory: %s", directoryPath))
 	}
-	fmt.Printf("message: system ::::: validated %s directory available\n", directoryPath)
+	fmt.Printf("message: system ::::: runtime[LOG] :: validated %s directory available\n", directoryPath)
 }
 
 func SetupLogger(directoryPath string, logName string) *log.Logger {
@@ -112,7 +112,7 @@ func SetupLogger(directoryPath string, logName string) *log.Logger {
 	logFilePath := fmt.Sprintf("%s/runtime.log", directoryPath)
 	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(fmt.Sprintf("message: system ::::: unable to open log file: %s", logFilePath))
+		panic(fmt.Sprintf("message: system ::::: runtime[LOG] :: unable to open log file: %s", logFilePath))
 	}
 	logger := log.New(file, "event: ", log.Ldate|log.Ltime|log.Lshortfile)
 	return logger
@@ -121,7 +121,7 @@ func SetupLogger(directoryPath string, logName string) *log.Logger {
 func ConsoleAndLoggerOutput(logger *log.Logger, Type string, Message string, Event string, ConsoleOut bool) {
 	logEntry, err := CreateLogEntry(Type, Message, Event)
 	if err != nil {
-		fmt.Printf("system ::::: error creating log entry: %v\n", err)
+		fmt.Printf("system ::::: runtime[LOG] :: error creating log entry: %v\n", err)
 		return
 	}
 	logger.Println(logEntry)
