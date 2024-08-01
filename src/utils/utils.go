@@ -46,24 +46,6 @@ type Config struct {
 	} `yaml:"configuration"`
 }
 
-type Message struct {
-	Content string         `json:"content,omitempty"`
-	Embeds  []DiscordEmbed `json:"embeds,omitempty"`
-}
-
-type DiscordEmbed struct {
-	Title       string         `json:"title,omitempty"`
-	Description string         `json:"description,omitempty"`
-	Color       int            `json:"color,omitempty"`
-	Fields      []DiscordField `json:"fields,omitempty"`
-}
-
-type DiscordField struct {
-	Name   string `json:"name,omitempty"`
-	Value  string `json:"value,omitempty"`
-	Inline bool   `json:"inline,omitempty"`
-}
-
 type Taskette struct {
 	Name      string
 	Address   string
@@ -117,12 +99,12 @@ func CreateLogEntry(Type string, Message string, Event string) (string, error) {
 }
 
 func ValidateLogDirectory(directoryPath string) {
-	fmt.Println(fmt.Sprintf("message: system ::::: validating %s directory available... skipping if available", directoryPath), "info")
+	fmt.Printf("message: system ::::: validating %s directory available... skipping if available\n", directoryPath)
 	err := os.MkdirAll(directoryPath, os.ModePerm)
 	if err != nil {
 		panic(fmt.Sprintf("message: system ::::: unable to create directory: %s", directoryPath))
 	}
-	fmt.Println(fmt.Sprintf("message: system ::::: validated %s directory available", directoryPath), "info")
+	fmt.Printf("message: system ::::: validated %s directory available\n", directoryPath)
 }
 
 func SetupLogger(directoryPath string, logName string) *log.Logger {
@@ -222,10 +204,8 @@ func ValidateHTTPConfig(httpConfig []struct {
 }
 
 func ValidateConfiguration(config *Config) error {
-	if !config.Configuration.DiscordWebHookDisable {
-		if config.Configuration.DiscordWebHookURL == "" {
-			return fmt.Errorf("discordWebhookUrl cannot be empty when discordWebhookDisable is false")
-		}
+	if !config.Configuration.DiscordWebHookDisable && config.Configuration.DiscordWebHookURL == "" {
+		return fmt.Errorf("discordWebhookUrl cannot be empty when discordWebhookDisable is false")
 	}
 
 	if !config.Configuration.SmtpDisable {
