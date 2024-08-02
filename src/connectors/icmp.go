@@ -3,13 +3,18 @@ package connectors
 import (
 	"time"
 
-	"github.com/go-ping/ping"
+	"github.com/prometheus-community/pro-bing"
 )
 
-func PingICMP(address string) time.Duration {
-	pinger, err := ping.NewPinger(address)
+func PingICMP(address string, privileged bool) time.Duration {
+	pinger, err := probing.NewPinger(address)
 	if err != nil {
 		return 0
+	}
+	if privileged {
+		pinger.SetPrivileged(true)
+	} else {
+		pinger.SetNetwork("udp")
 	}
 	pinger.Count = 1
 	pinger.Timeout = 2 * time.Second

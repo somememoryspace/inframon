@@ -31,6 +31,7 @@ type Config struct {
 	} `yaml:"http"`
 
 	Configuration struct {
+		PrivilegedMode        bool   `yaml:"privilegedMode"`
 		LogFileDirectory      string `yaml:"logFileDirectory"`
 		LogFileName           string `yaml:"logFileName"`
 		Stdout                bool   `yaml:"stdOut"`

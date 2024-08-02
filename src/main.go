@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"os/user"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -66,11 +68,11 @@ func getHealthStatus(m map[string]bool, key string) bool {
 	return m[key]
 }
 
-func pingTaskICMP(address string, service string, retryBuffer int, timeout int, networkZone string, instanceType string, wg *sync.WaitGroup) {
+func pingTaskICMP(privileged bool, address string, service string, retryBuffer int, timeout int, networkZone string, instanceType string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	consecutiveFailures := 0
 	for {
-		latency := connectors.PingICMP(address)
+		latency := connectors.PingICMP(address, privileged)
 		if latency == 0 {
 			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "error", STDOUT)
 			if getHealthStatus(ICMPHEALTH, address) {
@@ -159,15 +161,44 @@ func sendNotification(address, service, networkZone, instanceType, status string
 	}
 }
 
+func isRunningAsRoot() bool {
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("Error getting current user: %v\n", err)
+		return false
+	}
+	uid, err := strconv.Atoi(currentUser.Uid)
+	if err != nil {
+		fmt.Printf("Error converting UID to integer: %v\n", err)
+		return false
+	}
+	return uid == 0
+}
+
+func checkPrivileges(privilegedMode bool, logger *log.Logger) {
+	if privilegedMode != isRunningAsRoot() {
+		mode := "privileged"
+		userStatus := "unprivileged user"
+		if !privilegedMode {
+			mode = "unprivileged"
+			userStatus = "privileged user"
+		}
+		message := fmt.Sprintf("runtime[MAIN] :: running %s mode with %s", mode, userStatus)
+		utils.ConsoleAndLoggerOutput(logger, "system", message, "error", STDOUT)
+		panic(fmt.Sprintf("error[MAIN] :: running %s mode with %s", mode, userStatus))
+	}
+}
+
 func main() {
 	utils.ConsoleAndLoggerOutput(LOGGER, "system", "runtime[MAIN] :: starting service", "info", STDOUT)
+	checkPrivileges(CONFIG.Configuration.PrivilegedMode, LOGGER)
 
 	var wg sync.WaitGroup
 
 	for _, icmpConfig := range CONFIG.ICMP {
 		setHealthStatus(ICMPHEALTH, icmpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskICMP(icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, icmpConfig.Timeout, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg)
+		go pingTaskICMP(CONFIG.Configuration.PrivilegedMode, icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, icmpConfig.Timeout, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg)
 	}
 
 	for _, httpConfig := range CONFIG.HTTP {
