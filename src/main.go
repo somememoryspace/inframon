@@ -19,7 +19,7 @@ import (
 
 var (
 	MUTEX              sync.Mutex
-	CONFIGARG          = flag.String("config_path", "", "path/to/file targeting inframon config.yaml file")
+	CONFIGARG          = flag.String("config", "", "path/to/file targeting inframon config.yaml file")
 	CONFIG             *utils.Config
 	LOGGER             *log.Logger
 	ICMPHEALTH         = make(map[string]bool)
