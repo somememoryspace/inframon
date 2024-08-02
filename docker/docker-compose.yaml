@@ -10,5 +10,6 @@ services:
     environment:
       - CONFIG_PATH=/config/config.yaml
     volumes:
-      - ./config:/config
-      - ./logs:/inframon/logs
+      - ../config:/config
+      - ../logs:/inframon/logs
+    network_mode: bridge
