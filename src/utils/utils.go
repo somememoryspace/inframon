@@ -17,7 +17,7 @@ type Config struct {
 		Service        string `yaml:"service"`
 		Timeout        int    `yaml:"timeout"`
 		FailureTimeout int    `yaml:"failureTimeout"`
-		RetryBuffer    int    `yaml:"retrybuffer"`
+		RetryBuffer    int    `yaml:"retryBuffer"`
 		NetworkZone    string `yaml:"networkZone"`
 		InstanceType   string `yaml:"instanceType"`
 	} `yaml:"icmp"`
@@ -28,7 +28,7 @@ type Config struct {
 		Timeout        int    `yaml:"timeout"`
 		FailureTimeout int    `yaml:"failureTimeout"`
 		SkipVerify     bool   `yaml:"skipVerify"`
-		RetryBuffer    int    `yaml:"retrybuffer"`
+		RetryBuffer    int    `yaml:"retryBuffer"`
 		NetworkZone    string `yaml:"networkZone"`
 		InstanceType   string `yaml:"instanceType"`
 	} `yaml:"http"`
@@ -143,7 +143,7 @@ func ValidateICMPConfig(icmpConfig []struct {
 	Service        string `yaml:"service"`
 	Timeout        int    `yaml:"timeout"`
 	FailureTimeout int    `yaml:"failureTimeout"`
-	RetryBuffer    int    `yaml:"retrybuffer"`
+	RetryBuffer    int    `yaml:"retryBuffer"`
 	NetworkZone    string `yaml:"networkZone"`
 	InstanceType   string `yaml:"instanceType"`
 }) error {
@@ -184,7 +184,7 @@ func ValidateHTTPConfig(httpConfig []struct {
 	Timeout        int    `yaml:"timeout"`
 	FailureTimeout int    `yaml:"failureTimeout"`
 	SkipVerify     bool   `yaml:"skipVerify"`
-	RetryBuffer    int    `yaml:"retrybuffer"`
+	RetryBuffer    int    `yaml:"retryBuffer"`
 	NetworkZone    string `yaml:"networkZone"`
 	InstanceType   string `yaml:"instanceType"`
 }) error {
