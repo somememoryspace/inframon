@@ -186,7 +186,9 @@ func checkPrivileges(privilegedMode bool, logger *log.Logger) {
 
 func main() {
 	utils.ConsoleAndLoggerOutput(LOGGER, "system", "runtime[MAIN] :: starting service", "info", STDOUT)
-	checkPrivileges(CONFIG.Configuration.PrivilegedMode, LOGGER)
+	if !CONFIG.Configuration.LXCMode {
+		checkPrivileges(CONFIG.Configuration.PrivilegedMode, LOGGER)
+	}
 
 	var wg sync.WaitGroup
 
