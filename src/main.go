@@ -74,7 +74,7 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 	for {
 		latency, err := connectors.PingICMP(address, privileged)
 		if err != nil {
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v] error[%s]", address, service, networkZone, instanceType, latency, err), "error", STDOUT)
+			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%d] error[%v]", address, service, networkZone, instanceType, latency, err), "error", STDOUT)
 			if getHealthStatus(ICMPHEALTH, address) {
 				consecutiveFailures++
 				if consecutiveFailures > retryBuffer {
@@ -83,7 +83,7 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 				}
 			}
 		} else {
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "info", STDOUT)
+			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%d]", address, service, networkZone, instanceType, latency), "info", STDOUT)
 			if !getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, true)
 				sendNotification(address, service, networkZone, instanceType, "Connection Established", 0x00FF00, latency)
@@ -100,13 +100,13 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 	for {
 		respCode, err := connectors.PingHTTP(address, service, skipVerify, retryBuffer, failureTimeout)
 		if err != nil || respCode == 0 {
-			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v] error[%s]", address, service, networkZone, instanceType, respCode, err), "error", STDOUT)
+			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%d] error[%v]", address, service, networkZone, instanceType, respCode, err), "error", STDOUT)
 			if getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, false)
 				sendNotification(address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, 0)
 			}
 		} else if respCode == 200 || respCode == 201 || respCode == 204 {
-			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "info", STDOUT)
+			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%d]", address, service, networkZone, instanceType, respCode), "info", STDOUT)
 			if !getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, true)
 				sendNotification(address, service, networkZone, instanceType, "Connection Established", 0x00FF00, 0)
@@ -159,12 +159,12 @@ func sendNotification(address, service, networkZone, instanceType, status string
 func isRunningAsRoot() bool {
 	currentUser, err := user.Current()
 	if err != nil {
-		fmt.Printf("Error getting current user: %v\n", err)
+		fmt.Printf("error getting current user: %v\n", err)
 		return false
 	}
 	uid, err := strconv.Atoi(currentUser.Uid)
 	if err != nil {
-		fmt.Printf("Error converting UID to integer: %v\n", err)
+		fmt.Printf("error converting UID to integer: %v\n", err)
 		return false
 	}
 	return uid == 0
