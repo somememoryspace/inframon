@@ -1,9 +1,9 @@
 package connectors
 
 import (
-	"time"
-
+	"fmt"
 	"github.com/prometheus-community/pro-bing"
+	"time"
 )
 
 func PingICMP(address string, privileged bool) (time.Duration, error) {
@@ -23,5 +23,8 @@ func PingICMP(address string, privileged bool) (time.Duration, error) {
 		return 0, err
 	}
 	stats := pinger.Statistics()
+	if stats.AvgRtt == 0 {
+		return 0, fmt.Errorf("failed to create ping address: %s", address)
+	}
 	return stats.AvgRtt, nil
 }
