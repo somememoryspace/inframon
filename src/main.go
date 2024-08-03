@@ -79,6 +79,7 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 				if consecutiveFailures > retryBuffer {
 					setHealthStatus(ICMPHEALTH, address, false)
 					sendNotification(address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, latency)
+					time.Sleep(time.Duration(timeout) * time.Second)
 				} else {
 					consecutiveFailures++
 				}
@@ -89,8 +90,8 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 				consecutiveFailures = 0
 				setHealthStatus(ICMPHEALTH, address, true)
 				sendNotification(address, service, networkZone, instanceType, "Connection Established", 0x00FF00, latency)
-				time.Sleep(time.Duration(timeout) * time.Second)
 			}
+			time.Sleep(time.Duration(timeout) * time.Second)
 		}
 	}
 }
