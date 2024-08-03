@@ -74,7 +74,7 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 	for {
 		latency, err := connectors.PingICMP(address, privileged)
 		if err != nil {
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%d] error[%v]", address, service, networkZone, instanceType, latency, err), "error", STDOUT)
+			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v] error[%v]", address, service, networkZone, instanceType, latency, err), "error", STDOUT)
 			if getHealthStatus(ICMPHEALTH, address) {
 				consecutiveFailures++
 				if consecutiveFailures > retryBuffer {
@@ -83,7 +83,7 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 				}
 			}
 		} else {
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%d]", address, service, networkZone, instanceType, latency), "info", STDOUT)
+			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "info", STDOUT)
 			if !getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, true)
 				sendNotification(address, service, networkZone, instanceType, "Connection Established", 0x00FF00, latency)
