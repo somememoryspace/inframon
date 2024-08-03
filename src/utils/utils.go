@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/mail"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -47,6 +48,7 @@ type Config struct {
 		SmtpPassword          string `yaml:"smtpPassword"`
 		SmtpFrom              string `yaml:"smtpFrom"`
 		SmtpTo                string `yaml:"smtpTo"`
+		LXCMode               bool   `yaml:"lxcMode"`
 	} `yaml:"configuration"`
 }
 
@@ -241,6 +243,9 @@ func ValidateConfiguration(config *Config) error {
 		if config.Configuration.SmtpPort == "" {
 			return fmt.Errorf("smtpPort cannot be empty when smtpDisable is false")
 		}
+		if err := validatePort(config.Configuration.SmtpPort); err != nil {
+			return fmt.Errorf("smtpPort is invalid: %v", err)
+		}
 		if config.Configuration.SmtpUsername == "" {
 			return fmt.Errorf("smtpUsername cannot be empty when smtpDisable is false")
 		}
@@ -255,8 +260,32 @@ func ValidateConfiguration(config *Config) error {
 	if config.Configuration.LogFileName == "" {
 		return fmt.Errorf("logFileName cannot be empty")
 	}
+	if !config.Configuration.Stdout && config.Configuration.LogFileDirectory == "" {
+		return fmt.Errorf("either logFileDirectory should be specified or stdout should be true")
+	}
+
 	if config.Configuration.HealthCheckTimeout <= 0 {
 		return fmt.Errorf("healthCheckTimeout must be greater than 0")
+	}
+
+	if err := ValidateICMPConfig(config.ICMP); err != nil {
+		return fmt.Errorf("icmp config validation failed: %v", err)
+	}
+
+	if err := ValidateHTTPConfig(config.HTTP); err != nil {
+		return fmt.Errorf("http config validation failed: %v", err)
+	}
+
+	if config.Configuration.PrivilegedMode && config.Configuration.LXCMode {
+		return fmt.Errorf("lxcMode cannot be enabled when privilegedMode is true")
+	}
+	return nil
+}
+
+func validatePort(port string) error {
+	_, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("port must be a valid integer: %s", port)
 	}
 	return nil
 }
