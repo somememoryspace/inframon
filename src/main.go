@@ -80,7 +80,8 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 				if consecutiveFailures > retryBuffer {
 					setHealthStatus(ICMPHEALTH, address, false)
 					sendNotification(address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, latency)
-					return
+				} else {
+					continue
 				}
 			}
 		} else {
