@@ -24,7 +24,7 @@ func PingICMP(address string, privileged bool) (time.Duration, error) {
 	}
 	stats := pinger.Statistics()
 	if stats.AvgRtt == 0 {
-		return 0, fmt.Errorf("failed to create ping address: %s", address)
+		return 0, fmt.Errorf("failed to create ping for address: %s", address)
 	}
 	return stats.AvgRtt, nil
 }
