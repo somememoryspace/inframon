@@ -4,12 +4,14 @@ services:
   inframon:
     container_name: inframon
     image: inframon:latest
-    user: "1000:1000"
     cap_add:
       - NET_RAW
     environment:
       - CONFIG_PATH=/config/config.yaml
     volumes:
       - ../config:/config
-      - ../logs:/inframon/logs
+      - inframon_logs:/inframon/logs
     network_mode: bridge
+
+volumes:
+  inframon_logs:
