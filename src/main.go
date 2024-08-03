@@ -72,9 +72,9 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 	defer wg.Done()
 	consecutiveFailures := 0
 	for {
-		latency := connectors.PingICMP(address, privileged)
-		if latency == 0 {
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "error", STDOUT)
+		latency, err := connectors.PingICMP(address, privileged)
+		if err != nil {
+			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v] error[%s]", address, service, networkZone, instanceType, latency, err), "error", STDOUT)
 			if getHealthStatus(ICMPHEALTH, address) {
 				consecutiveFailures++
 				if consecutiveFailures > retryBuffer {
@@ -95,19 +95,15 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 	}
 }
 
-func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, skipVerify bool, networkZone string, instanceType string, wg *sync.WaitGroup) {
+func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, failureTimeout int, skipVerify bool, networkZone string, instanceType string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	consecutiveFailures := 0
 	for {
-		respCode, err := connectors.PingHTTP(address, service, skipVerify)
+		respCode, err := connectors.PingHTTP(address, service, skipVerify, retryBuffer, failureTimeout)
 		if err != nil || respCode == 0 {
-			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "error", STDOUT)
+			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v] error[%s]", address, service, networkZone, instanceType, respCode, err), "error", STDOUT)
 			if getHealthStatus(HTTPHEALTH, address) {
-				consecutiveFailures++
-				if consecutiveFailures > retryBuffer {
-					setHealthStatus(HTTPHEALTH, address, false)
-					sendNotification(address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, 0)
-				}
+				setHealthStatus(HTTPHEALTH, address, false)
+				sendNotification(address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, 0)
 			}
 		} else if respCode == 200 || respCode == 201 || respCode == 204 {
 			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%v]", address, service, networkZone, instanceType, respCode), "info", STDOUT)
@@ -115,7 +111,6 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 				setHealthStatus(HTTPHEALTH, address, true)
 				sendNotification(address, service, networkZone, instanceType, "Connection Established", 0x00FF00, 0)
 			}
-			consecutiveFailures = 0
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
 	}
@@ -204,7 +199,7 @@ func main() {
 	for _, httpConfig := range CONFIG.HTTP {
 		setHealthStatus(HTTPHEALTH, httpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskHTTP(httpConfig.Address, httpConfig.Service, httpConfig.RetryBuffer, httpConfig.Timeout, httpConfig.SkipVerify, httpConfig.NetworkZone, httpConfig.InstanceType, &wg)
+		go pingTaskHTTP(httpConfig.Address, httpConfig.Service, httpConfig.RetryBuffer, httpConfig.Timeout, httpConfig.FailureTimeout, httpConfig.SkipVerify, httpConfig.NetworkZone, httpConfig.InstanceType, &wg)
 	}
 	wg.Add(1)
 	go healthCheck(HEALTHCHECKTIMEOUT)

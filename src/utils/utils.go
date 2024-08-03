@@ -12,22 +12,24 @@ import (
 
 type Config struct {
 	ICMP []struct {
-		Address      string `yaml:"address"`
-		Service      string `yaml:"service"`
-		Timeout      int    `yaml:"timeout"`
-		RetryBuffer  int    `yaml:"retrybuffer"`
-		NetworkZone  string `yaml:"networkZone"`
-		InstanceType string `yaml:"instanceType"`
+		Address        string `yaml:"address"`
+		Service        string `yaml:"service"`
+		Timeout        int    `yaml:"timeout"`
+		FailureTimeout int    `yaml:"failureTimeout"`
+		RetryBuffer    int    `yaml:"retrybuffer"`
+		NetworkZone    string `yaml:"networkZone"`
+		InstanceType   string `yaml:"instanceType"`
 	} `yaml:"icmp"`
 
 	HTTP []struct {
-		Address      string `yaml:"address"`
-		Service      string `yaml:"service"`
-		Timeout      int    `yaml:"timeout"`
-		SkipVerify   bool   `yaml:"skipVerify"`
-		RetryBuffer  int    `yaml:"retrybuffer"`
-		NetworkZone  string `yaml:"networkZone"`
-		InstanceType string `yaml:"instanceType"`
+		Address        string `yaml:"address"`
+		Service        string `yaml:"service"`
+		Timeout        int    `yaml:"timeout"`
+		FailureTimeout int    `yaml:"failureTimeout"`
+		SkipVerify     bool   `yaml:"skipVerify"`
+		RetryBuffer    int    `yaml:"retrybuffer"`
+		NetworkZone    string `yaml:"networkZone"`
+		InstanceType   string `yaml:"instanceType"`
 	} `yaml:"http"`
 
 	Configuration struct {
@@ -135,12 +137,13 @@ func ConsoleAndLoggerOutput(logger *log.Logger, Type string, Message string, Eve
 }
 
 func ValidateICMPConfig(icmpConfig []struct {
-	Address      string `yaml:"address"`
-	Service      string `yaml:"service"`
-	Timeout      int    `yaml:"timeout"`
-	RetryBuffer  int    `yaml:"retrybuffer"`
-	NetworkZone  string `yaml:"networkZone"`
-	InstanceType string `yaml:"instanceType"`
+	Address        string `yaml:"address"`
+	Service        string `yaml:"service"`
+	Timeout        int    `yaml:"timeout"`
+	FailureTimeout int    `yaml:"failureTimeout"`
+	RetryBuffer    int    `yaml:"retrybuffer"`
+	NetworkZone    string `yaml:"networkZone"`
+	InstanceType   string `yaml:"instanceType"`
 }) error {
 	addresses := make(map[string]bool)
 	for i, icmp := range icmpConfig {
@@ -152,6 +155,9 @@ func ValidateICMPConfig(icmpConfig []struct {
 		}
 		if icmp.Timeout <= 0 {
 			return fmt.Errorf("icmp config at index %d has invalid timeout value", i)
+		}
+		if icmp.FailureTimeout <= 0 {
+			return fmt.Errorf("icmp config at index %d has invalid failureTimeout value", i)
 		}
 		if icmp.RetryBuffer < 0 {
 			return fmt.Errorf("icmp config at index %d has invalid retrybuffer value", i)
@@ -171,13 +177,14 @@ func ValidateICMPConfig(icmpConfig []struct {
 }
 
 func ValidateHTTPConfig(httpConfig []struct {
-	Address      string `yaml:"address"`
-	Service      string `yaml:"service"`
-	Timeout      int    `yaml:"timeout"`
-	SkipVerify   bool   `yaml:"skipVerify"`
-	RetryBuffer  int    `yaml:"retrybuffer"`
-	NetworkZone  string `yaml:"networkZone"`
-	InstanceType string `yaml:"instanceType"`
+	Address        string `yaml:"address"`
+	Service        string `yaml:"service"`
+	Timeout        int    `yaml:"timeout"`
+	FailureTimeout int    `yaml:"failureTimeout"`
+	SkipVerify     bool   `yaml:"skipVerify"`
+	RetryBuffer    int    `yaml:"retrybuffer"`
+	NetworkZone    string `yaml:"networkZone"`
+	InstanceType   string `yaml:"instanceType"`
 }) error {
 	addresses := make(map[string]bool)
 	for i, http := range httpConfig {
@@ -189,6 +196,9 @@ func ValidateHTTPConfig(httpConfig []struct {
 		}
 		if http.Timeout <= 0 {
 			return fmt.Errorf("http config at index %d has invalid timeout value", i)
+		}
+		if http.FailureTimeout <= 0 {
+			return fmt.Errorf("http config at index %d has invalid failureTimeout value", i)
 		}
 		if http.RetryBuffer < 0 {
 			return fmt.Errorf("http config at index %d has invalid retrybuffer value", i)

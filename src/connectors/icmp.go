@@ -6,10 +6,10 @@ import (
 	"github.com/prometheus-community/pro-bing"
 )
 
-func PingICMP(address string, privileged bool) time.Duration {
+func PingICMP(address string, privileged bool) (time.Duration, error) {
 	pinger, err := probing.NewPinger(address)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	if privileged {
 		pinger.SetPrivileged(true)
@@ -20,8 +20,8 @@ func PingICMP(address string, privileged bool) time.Duration {
 	pinger.Timeout = 2 * time.Second
 	err = pinger.Run()
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	stats := pinger.Statistics()
-	return stats.AvgRtt
+	return stats.AvgRtt, nil
 }
