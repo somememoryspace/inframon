@@ -7,18 +7,16 @@ import (
 )
 
 func PingICMP(address string, privileged bool, retryBuffer int, failureTimeout int) (time.Duration, error) {
-	var lastErr error
 	for attempt := 0; attempt <= retryBuffer; attempt++ {
 		latency, err := performICMPPing(address, privileged, failureTimeout)
 		if err == nil {
 			return latency, nil
 		}
-		lastErr = err
 		if attempt < retryBuffer {
 			time.Sleep(time.Second * time.Duration(attempt+1))
 		}
 	}
-	return 0, fmt.Errorf("icmp ping failed after %d retries: %v", retryBuffer, lastErr)
+	return 0, fmt.Errorf("icmp ping failed after %d attempts", retryBuffer)
 }
 
 func performICMPPing(address string, privileged bool, failureTimeout int) (time.Duration, error) {
