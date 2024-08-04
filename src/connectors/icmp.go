@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-func PingICMP(address string, privileged bool, retryBuffer int, timeout int) (time.Duration, error) {
+func PingICMP(address string, privileged bool, retryBuffer int, failureTimeout int) (time.Duration, error) {
 	var lastErr error
 	for attempt := 0; attempt <= retryBuffer; attempt++ {
-		latency, err := performICMPPing(address, privileged, timeout)
+		latency, err := performICMPPing(address, privileged, failureTimeout)
 		if err == nil {
 			return latency, nil
 		}
@@ -21,7 +21,7 @@ func PingICMP(address string, privileged bool, retryBuffer int, timeout int) (ti
 	return 0, fmt.Errorf("icmp ping failed after %d retries: %v", retryBuffer, lastErr)
 }
 
-func performICMPPing(address string, privileged bool, timeout int) (time.Duration, error) {
+func performICMPPing(address string, privileged bool, failureTimeout int) (time.Duration, error) {
 	pinger, err := probing.NewPinger(address)
 	if err != nil {
 		return 0, err
@@ -32,7 +32,7 @@ func performICMPPing(address string, privileged bool, timeout int) (time.Duratio
 		pinger.SetNetwork("udp")
 	}
 	pinger.Count = 1
-	pinger.Timeout = time.Duration(timeout) * time.Second
+	pinger.Timeout = time.Duration(failureTimeout) * time.Second
 	err = pinger.Run()
 	if err != nil {
 		return 0, err

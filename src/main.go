@@ -68,10 +68,10 @@ func getHealthStatus(m map[string]bool, key string) bool {
 	return m[key]
 }
 
-func pingTaskICMP(privileged bool, address string, service string, retryBuffer int, timeout int, networkZone string, instanceType string, wg *sync.WaitGroup) {
+func pingTaskICMP(privileged bool, address string, service string, retryBuffer int, timeout int, failureTimeout int, networkZone string, instanceType string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
-		latency, err := connectors.PingICMP(address, privileged, retryBuffer, timeout)
+		latency, err := connectors.PingICMP(address, privileged, retryBuffer, failureTimeout)
 		if err == nil && latency == 0 {
 			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v] error[%v]", address, service, networkZone, instanceType, latency, err), "error", STDOUT)
 			if getHealthStatus(ICMPHEALTH, address) {
@@ -189,7 +189,7 @@ func main() {
 	for _, icmpConfig := range CONFIG.ICMP {
 		setHealthStatus(ICMPHEALTH, icmpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskICMP(CONFIG.Configuration.PrivilegedMode, icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, icmpConfig.Timeout, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg)
+		go pingTaskICMP(CONFIG.Configuration.PrivilegedMode, icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, icmpConfig.Timeout, icmpConfig.FailureTimeout, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg)
 	}
 
 	for _, httpConfig := range CONFIG.HTTP {
