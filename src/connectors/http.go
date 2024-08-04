@@ -10,12 +10,12 @@ import (
 	"time"
 )
 
-func PingHTTP(address string, service string, skipVerify bool, retryBuffer int, timeout int) (int, error) {
+func PingHTTP(address string, service string, skipVerify bool, retryBuffer int, failureTimeout int) (int, error) {
 	if !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
 		return 0, fmt.Errorf("invalid http address prefix :: address[%s]", address)
 	}
 	httpClient := &http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
+		Timeout: time.Duration(failureTimeout) * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: skipVerify},
 		},
@@ -26,8 +26,8 @@ func PingHTTP(address string, service string, skipVerify bool, retryBuffer int, 
 		if err != nil {
 			lastErr = err
 			if isRetryableError(err) && attempt < retryBuffer {
-				fmt.Printf("Retryable error: %v. Retrying (%d/%d)\n", err, attempt+1, retryBuffer)
-				time.Sleep(time.Second * time.Duration(attempt+1)) // Exponential backoff
+				fmt.Printf("retryable error: %v. retrying (%d/%d)\n", err, attempt+1, retryBuffer)
+				time.Sleep(time.Second * time.Duration(attempt+1))
 				continue
 			}
 			return 0, fmt.Errorf("request failed: %v", err)
