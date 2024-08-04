@@ -72,7 +72,7 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 	defer wg.Done()
 	for {
 		latency, err := connectors.PingICMP(address, privileged, retryBuffer, timeout)
-		if err != nil || latency == 0 {
+		if err == nil && latency == 0 {
 			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v] error[%v]", address, service, networkZone, instanceType, latency, err), "error", STDOUT)
 			if getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, false)

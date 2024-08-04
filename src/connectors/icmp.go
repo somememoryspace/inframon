@@ -18,7 +18,7 @@ func PingICMP(address string, privileged bool, retryBuffer int, timeout int) (ti
 			time.Sleep(time.Second * time.Duration(attempt+1))
 		}
 	}
-	return 0, fmt.Errorf("ICMP ping failed after %d retries: %v", retryBuffer, lastErr)
+	return 0, fmt.Errorf("icmp ping failed after %d retries: %v", retryBuffer, lastErr)
 }
 
 func performICMPPing(address string, privileged bool, timeout int) (time.Duration, error) {
