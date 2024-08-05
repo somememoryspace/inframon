@@ -20,6 +20,7 @@ import (
 var (
 	MUTEX              sync.Mutex
 	CONFIGARG          = flag.String("config", "", "path/to/file targeting inframon config.yaml file")
+	LOGPATHARG         = flag.String("logpath", "", "path/to/logfile targeting inframon log file")
 	CONFIG             *utils.Config
 	LOGGER             *log.Logger
 	ICMPHEALTH         = make(map[string]bool)
@@ -36,6 +37,13 @@ func init() {
 	}
 
 	CONFIG = utils.ParseConfig(*CONFIGARG)
+
+	if !CONFIG.Configuration.Stdout {
+		if *LOGPATHARG == "" {
+			log.Fatal("no logfile path provided")
+		}
+	}
+
 	LOGGER = utils.SetupLogger(CONFIG.Configuration.Stdout, CONFIG.Configuration.LogFileDirectory, CONFIG.Configuration.LogFileName)
 
 	if err := utils.ValidateICMPConfig(CONFIG.ICMP); err != nil {

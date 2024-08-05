@@ -109,6 +109,7 @@ func ValidateLogDirectory(directoryPath string) {
 	if err != nil {
 		panic(fmt.Sprintf("message: system :: runtime[LOG] :: unable to create directory: %s", directoryPath))
 	}
+	fmt.Printf("message: system :: runtime[LOG] :: validated %s directory available\n", directoryPath)
 }
 
 func SetupLogger(ConsoleOut bool, directoryPath string, logName string) *log.Logger {
@@ -254,14 +255,13 @@ func ValidateConfiguration(config *Config) error {
 		}
 	}
 
-	if config.Configuration.LogFileDirectory == "" {
-		return fmt.Errorf("logFileDirectory cannot be empty")
-	}
-	if config.Configuration.LogFileName == "" {
-		return fmt.Errorf("logFileName cannot be empty")
-	}
-	if !config.Configuration.Stdout && config.Configuration.LogFileDirectory == "" {
-		return fmt.Errorf("either logFileDirectory should be specified or stdout should be true")
+	if !config.Configuration.Stdout {
+		if config.Configuration.LogFileName == "" {
+			return fmt.Errorf("logFileName cannot be empty")
+		}
+		if config.Configuration.LogFileDirectory == "" {
+			return fmt.Errorf("LogFileDirectory cannot be empty")
+		}
 	}
 
 	if config.Configuration.HealthCheckTimeout <= 0 {
