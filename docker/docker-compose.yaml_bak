@@ -10,4 +10,8 @@ services:
       - CONFIG_PATH=/config/config.yaml
     volumes:
       - ../config:/config
+      - inframon_logs:/inframon/logs
     network_mode: bridge
+
+volumes:
+  inframon_logs:
