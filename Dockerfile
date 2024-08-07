@@ -28,4 +28,4 @@ USER inframon
 
 ENV CONFIG_PATH=/config/config.yaml
 
-CMD ["./inframon", "--config=${CONFIG_PATH}"]
+CMD ["./inframon", "--config=$CONFIG_PATH"]
