@@ -12,7 +12,13 @@ FROM debian:bullseye-slim
 
 RUN apt-get update -y && apt-get install -y ca-certificates openssl
 
-RUN mkdir -p /logs
+RUN useradd -m inframon
+
+WORKDIR /inframon
+
+RUN mkdir -p /logs && chown inframon:inframon /inframon/logs
+
+USER inframon
 
 COPY --from=builder /inframon/inframon .
 
