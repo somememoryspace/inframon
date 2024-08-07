@@ -51,15 +51,6 @@ type Config struct {
 	} `yaml:"configuration"`
 }
 
-type Taskette struct {
-	Name      string
-	Address   string
-	Protocol  string
-	Status    bool
-	Tags      []string
-	Statistic string
-}
-
 type LogEntry struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
