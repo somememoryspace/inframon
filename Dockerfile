@@ -16,7 +16,7 @@ RUN useradd -m inframon
 
 WORKDIR /inframon
 
-RUN mkdir -p /logs && chown inframon:inframon /inframon/logs
+RUN mkdir -p /inframon/logs && chown inframon:inframon /inframon/logs
 
 USER inframon
 
