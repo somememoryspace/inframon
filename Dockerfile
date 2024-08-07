@@ -22,7 +22,7 @@ RUN mkdir -p /inframon/logs && chown inframon:inframon /inframon/logs
 
 COPY --from=builder /inframon/inframon .
 
-RUN setcap cap_net_raw,cap_net_admin=+ep ./inframon
+RUN setcap cap_net_raw,cap_net_admin+eip ./inframon
 
 USER inframon
 
