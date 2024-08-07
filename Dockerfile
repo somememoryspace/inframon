@@ -18,9 +18,11 @@ WORKDIR /inframon
 
 RUN mkdir -p /inframon/logs && chown inframon:inframon /inframon/logs
 
-USER inframon
-
 COPY --from=builder /inframon/inframon .
+
+RUN setcap cap_net_raw,cap_net_admin+ep /inframon/inframon
+
+USER inframon
 
 ENV CONFIG_PATH=/config/config.yaml
 
