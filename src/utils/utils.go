@@ -48,7 +48,6 @@ type Config struct {
 		SmtpPassword          string `yaml:"smtpPassword"`
 		SmtpFrom              string `yaml:"smtpFrom"`
 		SmtpTo                string `yaml:"smtpTo"`
-		LXCMode               bool   `yaml:"lxcMode"`
 	} `yaml:"configuration"`
 }
 
@@ -274,10 +273,6 @@ func ValidateConfiguration(config *Config) error {
 
 	if err := ValidateHTTPConfig(config.HTTP); err != nil {
 		return fmt.Errorf("http config validation failed: %v", err)
-	}
-
-	if config.Configuration.PrivilegedMode && config.Configuration.LXCMode {
-		return fmt.Errorf("lxcMode cannot be enabled when privilegedMode is true")
 	}
 	return nil
 }
