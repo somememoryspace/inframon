@@ -115,17 +115,7 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 				border-radius: 5px;
 				margin-bottom: 20px;
 			}
-			.status-change {
-				font-size: 18px;
-				font-weight: bold;
-				color: #1a73e8;
-			}
 			h2 {
-				color: #1a73e8;
-				border-bottom: 2px solid #1a73e8;
-				padding-bottom: 10px;
-			}
-			p {
 				color: #1a73e8;
 				border-bottom: 2px solid #1a73e8;
 				padding-bottom: 10px;
@@ -146,11 +136,8 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 		</style>
 	</head>
 	<body>
-		<div class="header">
-			<span class="status-change">Status Change :: Connection Interrupted</span>
-		</div>
 		<h2>%s</h2>
-		<p>%s</p>
+		<h2>%s</h2>
 		<ul>
 			<li><strong>Date:</strong> %s</li>
 			<li><strong>Time:</strong> %s</li>
