@@ -97,9 +97,9 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 
 	now := time.Now()
 	body := fmt.Sprintf(`
-		Title: %s
+		%s
 
-		Description: %s
+		%s
 
 		Address: %s
 		Service: %s
