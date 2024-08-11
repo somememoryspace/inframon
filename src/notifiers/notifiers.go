@@ -97,16 +97,21 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 
 	now := time.Now()
 	body := fmt.Sprintf(`
-		%s
-
-		%s
-
-		Address: %s
-		Service: %s
-		Date: %s
-		Time: %s
-		NetworkZone: %s
-		InstanceType: %s
+		<!DOCTYPE html>
+		<html>
+		<body>
+			<h2 style="color: #0000FF;">%s</h2>
+			<p>%s</p>
+			<ul>
+				<li><strong>Address:</strong> %s</li>
+				<li><strong>Service:</strong> %s</li>
+				<li><strong>Date:</strong> %s</li>
+				<li><strong>Time:</strong> %s</li>
+				<li><strong>NetworkZone:</strong> %s</li>
+				<li><strong>InstanceType:</strong> %s</li>
+			</ul>
+		</body>
+		</html>
 		`,
 		title,
 		description,
@@ -121,9 +126,22 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 	subject := title
 	auth := smtp.PlainAuth("", smtpUsername, smtpPassword, smtpHost)
 	to := []string{smtpTo}
-	msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n", smtpFrom, smtpTo, subject, body))
+
+	headers := make(map[string]string)
+	headers["From"] = smtpFrom
+	headers["To"] = smtpTo
+	headers["Subject"] = subject
+	headers["MIME-Version"] = "1.0"
+	headers["Content-Type"] = "text/html; charset=\"utf-8\""
+
+	message := ""
+	for k, v := range headers {
+		message += fmt.Sprintf("%s: %s\r\n", k, v)
+	}
+	message += "\r\n" + body
+
 	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
-	err := smtp.SendMail(addr, auth, smtpFrom, to, msg)
+	err := smtp.SendMail(addr, auth, smtpFrom, to, []byte(message))
 	if err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
