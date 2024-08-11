@@ -120,20 +120,15 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 				font-weight: bold;
 				color: #1a73e8;
 			}
-			.protocol {
-				background-color: #1a73e8;
-				color: white;
-				padding: 3px 8px;
-				border-radius: 3px;
-				margin-left: 10px;
-			}
 			h2 {
 				color: #1a73e8;
 				border-bottom: 2px solid #1a73e8;
 				padding-bottom: 10px;
 			}
 			p {
-				margin-bottom: 20px;
+				color: #1a73e8;
+				border-bottom: 2px solid #1a73e8;
+				padding-bottom: 10px;
 			}
 			ul {
 				list-style-type: none;
@@ -152,8 +147,7 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 	</head>
 	<body>
 		<div class="header">
-			<span class="status-change">Status Change</span>
-			<span class="protocol">[ICMP]</span>
+			<span class="status-change">Status Change :: Connection Interrupted</span>
 		</div>
 		<h2>%s</h2>
 		<p>%s</p>
