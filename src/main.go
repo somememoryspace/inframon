@@ -89,13 +89,13 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v] error[%v]", address, service, networkZone, instanceType, latency, err), "error")
 			if getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, false)
-				sendNotification(address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, latency)
+				sendNotification("ICMP", address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, latency)
 			}
 		} else {
 			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "info")
 			if !getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, true)
-				sendNotification(address, service, networkZone, instanceType, "Connection Established", 0x00FF00, latency)
+				sendNotification("ICMP", address, service, networkZone, instanceType, "Connection Established", 0x00FF00, latency)
 			}
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
@@ -110,13 +110,13 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%d] error[%v]", address, service, networkZone, instanceType, respCode, err), "error")
 			if getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, false)
-				sendNotification(address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, 0)
+				sendNotification("HTTP", address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, 0)
 			}
 		} else if respCode == 200 || respCode == 201 || respCode == 204 {
 			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%d]", address, service, networkZone, instanceType, respCode), "info")
 			if !getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, true)
-				sendNotification(address, service, networkZone, instanceType, "Connection Established", 0x00FF00, 0)
+				sendNotification("HTTP", address, service, networkZone, instanceType, "Connection Established", 0x00FF00, 0)
 			}
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
@@ -143,8 +143,8 @@ func healthCheck(timeout int) {
 	}
 }
 
-func sendNotification(address, service, networkZone, instanceType, status string, color int, latency time.Duration) {
-	message := fmt.Sprintf("Status Change: [%s]", service)
+func sendNotification(scanType string, address string, service string, networkZone string, instanceType string, status string, color int, latency time.Duration) {
+	message := fmt.Sprintf("Status Change [%s] :: [%s]", scanType, service)
 
 	// Notify Discord
 	errDiscord := notifiers.SendToDiscordWebhook(DISCORDDISABLE, CONFIG.Configuration.DiscordWebHookURL, status, message, color, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
