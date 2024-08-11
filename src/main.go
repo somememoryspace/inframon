@@ -61,6 +61,12 @@ func init() {
 
 	DISCORDDISABLE = CONFIG.Configuration.DiscordWebHookDisable
 	HEALTHCHECKTIMEOUT = CONFIG.Configuration.HealthCheckTimeout
+
+	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[privilegedMode] :: %v", CONFIG.Configuration.PrivilegedMode), "info")
+	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[stdOut] :: %v", CONFIG.Configuration.Stdout), "info")
+	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[healthCheckTimeout] :: %v", CONFIG.Configuration.HealthCheckTimeout), "info")
+	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[discordWebhookDisable] :: %v", CONFIG.Configuration.DiscordWebHookDisable), "info")
+	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[smtpDisable] :: %v", CONFIG.Configuration.SmtpDisable), "info")
 }
 
 func setHealthStatus(m map[string]bool, key string, value bool) {
