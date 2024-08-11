@@ -90,7 +90,7 @@ func sendDiscordRequest(webhookURL string, payload []byte) error {
 	return nil
 }
 
-func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, smtpHost string, smtpTo string, smtpFrom string, smtpPort string, title string, description string, color int, address string, service string, networkZone string, instanceType string) error {
+func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, smtpHost string, smtpTo string, smtpFrom string, smtpPort string, title string, description string, address string, service string, networkZone string, instanceType string) error {
 	if smtpDisable {
 		return fmt.Errorf("smtp push notifications disabled")
 	}
