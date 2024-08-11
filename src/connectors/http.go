@@ -26,7 +26,6 @@ func PingHTTP(address string, service string, skipVerify bool, retryBuffer int, 
 		if err != nil {
 			lastErr = err
 			if isRetryableError(err) && attempt < retryBuffer {
-				fmt.Printf("retryable error: %v. retrying (%d/%d)\n", err, attempt+1, retryBuffer)
 				time.Sleep(time.Second * time.Duration(attempt+1))
 				continue
 			}
