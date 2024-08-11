@@ -144,7 +144,7 @@ func healthCheck(timeout int) {
 }
 
 func sendNotification(scanType string, address string, service string, networkZone string, instanceType string, status string, color int, latency time.Duration) {
-	message := fmt.Sprintf("Status Change: [%s]", scanType)
+	message := fmt.Sprintf("Status Change :: %s", scanType)
 
 	// Notify Discord
 	errDiscord := notifiers.SendToDiscordWebhook(DISCORDDISABLE, CONFIG.Configuration.DiscordWebHookURL, status, message, color, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
