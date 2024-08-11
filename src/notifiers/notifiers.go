@@ -117,8 +117,10 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 			}
 			h2 {
 				color: #1a73e8;
-				border-bottom: 2px solid #1a73e8;
-				padding-bottom: 10px;
+				background-color: #f1f3f4;
+				margin-bottom: 10px;
+				padding: 10px;
+				border-radius: 5px;
 			}
 			ul {
 				list-style-type: none;
