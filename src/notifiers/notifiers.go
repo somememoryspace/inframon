@@ -100,9 +100,9 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 		<!DOCTYPE html>
 		<html>
 		<body>
-			<h2 style="color: #0000FF;">%s</h2>
+			<h2 style="color: #000000;">%s</h2>
 			<p>%s</p>
-			<ul>
+			<ul style="color: #000000;">
 				<li><strong>Address:</strong> %s</li>
 				<li><strong>Service:</strong> %s</li>
 				<li><strong>Date:</strong> %s</li>
