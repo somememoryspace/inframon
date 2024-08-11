@@ -103,22 +103,22 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 			<h2 style="color: #000000;">%s</h2>
 			<p>%s</p>
 			<ul style="color: #000000;">
-				<li><strong>Address:</strong> %s</li>
-				<li><strong>Service:</strong> %s</li>
 				<li><strong>Date:</strong> %s</li>
 				<li><strong>Time:</strong> %s</li>
+				<li><strong>Address:</strong> %s</li>
+				<li><strong>Service:</strong> %s</li>
 				<li><strong>NetworkZone:</strong> %s</li>
 				<li><strong>InstanceType:</strong> %s</li>
 			</ul>
 		</body>
 		</html>
 		`,
+		now.Format("2006-01-02"),
+		now.Format("15:04:05"),
 		title,
 		description,
 		address,
 		service,
-		now.Format("2006-01-02"),
-		now.Format("15:04:05"),
 		networkZone,
 		instanceType,
 	)
