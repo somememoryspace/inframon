@@ -113,10 +113,10 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 		</body>
 		</html>
 		`,
-		now.Format("2006-01-02"),
-		now.Format("15:04:05"),
 		title,
 		description,
+		now.Format("2006-01-02"),
+		now.Format("15:04:05"),
 		address,
 		service,
 		networkZone,
