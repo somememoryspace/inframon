@@ -97,55 +97,77 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 
 	now := time.Now()
 	body := fmt.Sprintf(`
-		<!DOCTYPE html>
-		<html>
-		<head>
-			<style>
-				body {
-					font-family: Arial, sans-serif;
-					line-height: 1.6;
-					color: #333333;
-					max-width: 600px;
-					margin: 0 auto;
-					padding: 20px;
-				}
-				h2 {
-					color: #1a73e8;
-					border-bottom: 2px solid #1a73e8;
-					padding-bottom: 10px;
-				}
-				p {
-					margin-bottom: 20px;
-				}
-				ul {
-					list-style-type: none;
-					padding: 0;
-				}
-				li {
-					background-color: #f1f3f4;
-					margin-bottom: 10px;
-					padding: 10px;
-					border-radius: 5px;
-				}
-				strong {
-					color: #1a73e8;
-				}
-			</style>
-		</head>
-		<body>
-			<h2>%s</h2>
-			<p>%s</p>
-			<ul>
-				<li><strong>Date:</strong> %s</li>
-				<li><strong>Time:</strong> %s</li>
-				<li><strong>Address:</strong> %s</li>
-				<li><strong>Service:</strong> %s</li>
-				<li><strong>NetworkZone:</strong> %s</li>
-				<li><strong>InstanceType:</strong> %s</li>
-			</ul>
-		</body>
-		</html>
-		`,
+	<!DOCTYPE html>
+	<html>
+	<head>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				line-height: 1.6;
+				color: #333333;
+				max-width: 600px;
+				margin: 0 auto;
+				padding: 20px;
+			}
+			.header {
+				background-color: #f1f3f4;
+				padding: 10px;
+				border-radius: 5px;
+				margin-bottom: 20px;
+			}
+			.status-change {
+				font-size: 18px;
+				font-weight: bold;
+				color: #1a73e8;
+			}
+			.protocol {
+				background-color: #1a73e8;
+				color: white;
+				padding: 3px 8px;
+				border-radius: 3px;
+				margin-left: 10px;
+			}
+			h2 {
+				color: #1a73e8;
+				border-bottom: 2px solid #1a73e8;
+				padding-bottom: 10px;
+			}
+			p {
+				margin-bottom: 20px;
+			}
+			ul {
+				list-style-type: none;
+				padding: 0;
+			}
+			li {
+				background-color: #f1f3f4;
+				margin-bottom: 10px;
+				padding: 10px;
+				border-radius: 5px;
+			}
+			strong {
+				color: #1a73e8;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="header">
+			<span class="status-change">Status Change</span>
+			<span class="protocol">[ICMP]</span>
+		</div>
+		<h2>%s</h2>
+		<p>%s</p>
+		<ul>
+			<li><strong>Date:</strong> %s</li>
+			<li><strong>Time:</strong> %s</li>
+			<li><strong>Address:</strong> %s</li>
+			<li><strong>Service:</strong> %s</li>
+			<li><strong>NetworkZone:</strong> %s</li>
+			<li><strong>InstanceType:</strong> %s</li>
+		</ul>
+	</body>
+	</html>
+	`,
 		title,
 		description,
 		now.Format("2006-01-02"),
