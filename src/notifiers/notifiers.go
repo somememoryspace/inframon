@@ -90,10 +90,35 @@ func sendDiscordRequest(webhookURL string, payload []byte) error {
 	return nil
 }
 
-func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, smtpHost string, smtpTo string, smtpFrom string, smtpPort string, subject, body string) error {
+func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, smtpHost string, smtpTo string, smtpFrom string, smtpPort string, title string, description string, color int, address string, service string, networkZone string, instanceType string) error {
 	if smtpDisable {
 		return fmt.Errorf("smtp push notifications disabled")
 	}
+
+	now := time.Now()
+	body := fmt.Sprintf(`
+		Title: %s
+
+		Description: %s
+
+		Address: %s
+		Service: %s
+		Date: %s
+		Time: %s
+		NetworkZone: %s
+		InstanceType: %s
+		`,
+		title,
+		description,
+		address,
+		service,
+		now.Format("2006-01-02"),
+		now.Format("15:04:05"),
+		networkZone,
+		instanceType,
+	)
+
+	subject := title
 	auth := smtp.PlainAuth("", smtpUsername, smtpPassword, smtpHost)
 	to := []string{smtpTo}
 	msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\r\n", smtpFrom, smtpTo, subject, body))
