@@ -99,10 +99,43 @@ func SendSMTPMail(smtpDisable bool, smtpUsername string, smtpPassword string, sm
 	body := fmt.Sprintf(`
 		<!DOCTYPE html>
 		<html>
+		<head>
+			<style>
+				body {
+					font-family: Arial, sans-serif;
+					line-height: 1.6;
+					color: #333333;
+					max-width: 600px;
+					margin: 0 auto;
+					padding: 20px;
+				}
+				h2 {
+					color: #1a73e8;
+					border-bottom: 2px solid #1a73e8;
+					padding-bottom: 10px;
+				}
+				p {
+					margin-bottom: 20px;
+				}
+				ul {
+					list-style-type: none;
+					padding: 0;
+				}
+				li {
+					background-color: #f1f3f4;
+					margin-bottom: 10px;
+					padding: 10px;
+					border-radius: 5px;
+				}
+				strong {
+					color: #1a73e8;
+				}
+			</style>
+		</head>
 		<body>
-			<h2 style="color: #000000;">%s</h2>
+			<h2>%s</h2>
 			<p>%s</p>
-			<ul style="color: #000000;">
+			<ul>
 				<li><strong>Date:</strong> %s</li>
 				<li><strong>Time:</strong> %s</li>
 				<li><strong>Address:</strong> %s</li>
