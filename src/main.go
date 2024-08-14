@@ -6,8 +6,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"os/user"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -21,8 +19,9 @@ var (
 	MUTEX              sync.Mutex
 	CONFIGARG          = flag.String("config", "", "path/to/file targeting inframon config.yaml file")
 	LOGPATHARG         = flag.String("logpath", "", "path/to/logfile targeting inframon log file")
+	LOGNAMEARG         = flag.String("logname", "", "file name for the log file")
 	CONFIG             *utils.Config
-	LOGGER             *log.Logger
+	LOGGER             *utils.SafeLogger
 	ICMPHEALTH         = make(map[string]bool)
 	HTTPHEALTH         = make(map[string]bool)
 	DISCORDDISABLE     bool
@@ -37,14 +36,28 @@ func init() {
 	}
 
 	CONFIG = utils.ParseConfig(*CONFIGARG)
+	utils.CheckPrivileges(CONFIG.Configuration.PrivilegedMode)
+
+	var err error
+	LOGGER, err = utils.SetupLogger(CONFIG.Configuration.Stdout, *LOGPATHARG, *LOGNAMEARG)
+	if err != nil || LOGGER == nil {
+		log.Fatalf("could not setup logger: %v", err)
+	}
 
 	if !CONFIG.Configuration.Stdout {
 		if *LOGPATHARG == "" {
-			log.Fatal("no logfile path provided")
+			log.Fatal("no logpath path provided in inframon startup argument")
+		}
+		if *LOGNAMEARG == "" {
+			log.Fatal("no logname path provided in inframon startup argument")
+		}
+		if CONFIG.Configuration.LogFileSize == "" {
+			log.Fatal("no logFileSize value provided in config file")
+		}
+		if CONFIG.Configuration.MaxLogFileKeep <= 0 {
+			log.Fatal("maxLogFileKeep value provided in config file must be greather than 0")
 		}
 	}
-
-	LOGGER = utils.SetupLogger(CONFIG.Configuration.Stdout, CONFIG.Configuration.LogFileDirectory, CONFIG.Configuration.LogFileName)
 
 	if err := utils.ValidateICMPConfig(CONFIG.ICMP); err != nil {
 		log.Fatalf("invalid icmp configuration: %v", err)
@@ -55,18 +68,19 @@ func init() {
 	}
 
 	if err := utils.ValidateConfiguration(CONFIG); err != nil {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("configuration validation failed: %v", err), "error")
+		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("Configuration validation failed: %v", err), "ERROR")
 		log.Fatalf("configuration validation failed: %v", err)
 	}
 
 	DISCORDDISABLE = CONFIG.Configuration.DiscordWebHookDisable
 	HEALTHCHECKTIMEOUT = CONFIG.Configuration.HealthCheckTimeout
 
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[privilegedMode] :: %v", CONFIG.Configuration.PrivilegedMode), "info")
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[stdOut] :: %v", CONFIG.Configuration.Stdout), "info")
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[healthCheckTimeout] :: %v", CONFIG.Configuration.HealthCheckTimeout), "info")
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[discordWebhookDisable] :: %v", CONFIG.Configuration.DiscordWebHookDisable), "info")
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("variable[smtpDisable] :: %v", CONFIG.Configuration.SmtpDisable), "info")
+	sendNotificationSystem("Booting Inframon Service", "Inframon Started")
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("privilegedMode :: [%v]", CONFIG.Configuration.PrivilegedMode), "INFO")
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("stdOut :: [%v]", CONFIG.Configuration.Stdout), "INFO")
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("healthCheckTimeout :: [%v]", CONFIG.Configuration.HealthCheckTimeout), "INFO")
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("discordWebhookDisable :: [%v]", CONFIG.Configuration.DiscordWebHookDisable), "INFO")
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("smtpDisable :: [%v]", CONFIG.Configuration.SmtpDisable), "INFO")
 }
 
 func setHealthStatus(m map[string]bool, key string, value bool) {
@@ -86,16 +100,16 @@ func pingTaskICMP(privileged bool, address string, service string, retryBuffer i
 	for {
 		latency, err := connectors.PingICMP(address, privileged, retryBuffer, failureTimeout)
 		if latency == 0 {
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v] error[%v]", address, service, networkZone, instanceType, latency, err), "error")
+			utils.ConsoleAndLoggerOutput(LOGGER, "ICMP KO", fmt.Sprintf("Address: [%s] Service: [%s] NetworkZone: [%s] InstanceType: [%s] Latency: [%v] Error: [%v]", address, service, networkZone, instanceType, latency, err), "ERROR")
 			if getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, false)
-				sendNotification("ICMP", address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, latency)
+				sendNotification("Status Changed :: ICMP", address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, latency)
 			}
 		} else {
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: latency[%v]", address, service, networkZone, instanceType, latency), "info")
+			utils.ConsoleAndLoggerOutput(LOGGER, "ICMP OK", fmt.Sprintf("Address: [%s] Service: [%s] NetworkZone: [%s] InstanceType: [%s] Latency: [%v]", address, service, networkZone, instanceType, latency), "INFO")
 			if !getHealthStatus(ICMPHEALTH, address) {
 				setHealthStatus(ICMPHEALTH, address, true)
-				sendNotification("ICMP", address, service, networkZone, instanceType, "Connection Established", 0x00FF00, latency)
+				sendNotification("Status Changed :: ICMP", address, service, networkZone, instanceType, "Connection Established", 0x00FF00, latency)
 			}
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
@@ -107,16 +121,16 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 	for {
 		respCode, err := connectors.PingHTTP(address, service, skipVerify, retryBuffer, failureTimeout)
 		if err != nil || respCode == 0 {
-			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[KO] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%d] error[%v]", address, service, networkZone, instanceType, respCode, err), "error")
+			utils.ConsoleAndLoggerOutput(LOGGER, "HTTP KO", fmt.Sprintf("Address: [%s] Service: [%s] NetworkZone: [%s] InstanceType: [%s] Response: [%d] Error: [%v]", address, service, networkZone, instanceType, respCode, err), "ERROR")
 			if getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, false)
-				sendNotification("HTTP", address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, 0)
+				sendNotification("Status Changed :: HTTP", address, service, networkZone, instanceType, "Connection Interrupted", 0xFF0000, 0)
 			}
 		} else if respCode == 200 || respCode == 201 || respCode == 204 {
-			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("connection[OK] :: address[%s] service[%s] networkzone[%s] instancetype[%s] :: response[%d]", address, service, networkZone, instanceType, respCode), "info")
+			utils.ConsoleAndLoggerOutput(LOGGER, "HTTP OK", fmt.Sprintf("Address: [%s] Service: [%s] NetworkZone: [%s] InstanceType: [%s] Response: [%d]", address, service, networkZone, instanceType, respCode), "INFO")
 			if !getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, true)
-				sendNotification("HTTP", address, service, networkZone, instanceType, "Connection Established", 0x00FF00, 0)
+				sendNotification("Status Changed :: HTTP", address, service, networkZone, instanceType, "Connection Established", 0xFF0000, 0)
 			}
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
@@ -130,70 +144,60 @@ func healthCheck(timeout int) {
 			if !getHealthStatus(ICMPHEALTH, address) {
 				status = "FAIL"
 			}
-			utils.ConsoleAndLoggerOutput(LOGGER, "icmp", fmt.Sprintf("health[%s] :: address[%s]", status, address), "info")
+			utils.ConsoleAndLoggerOutput(LOGGER, "ICMP HEALTH", fmt.Sprintf("Health [%s] Address [%s]", status, address), "INFO")
 		}
 		for address := range HTTPHEALTH {
 			status := "PASS"
 			if !getHealthStatus(HTTPHEALTH, address) {
 				status = "FAIL"
 			}
-			utils.ConsoleAndLoggerOutput(LOGGER, "http", fmt.Sprintf("health[%s] :: address[%s]", status, address), "info")
+			utils.ConsoleAndLoggerOutput(LOGGER, "HTTP HEALTH", fmt.Sprintf("Health [%s] Address [%s]", status, address), "INFO")
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
 	}
 }
 
-func sendNotification(scanType string, address string, service string, networkZone string, instanceType string, status string, color int, latency time.Duration) {
-	message := fmt.Sprintf("Status Change :: %s", scanType)
+func sendNotification(message string, address string, service string, networkZone string, instanceType string, status string, color int, latency time.Duration) {
 
-	// Notify Discord
-	errDiscord := notifiers.SendToDiscordWebhook(DISCORDDISABLE, CONFIG.Configuration.DiscordWebHookURL, status, message, color, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
+	var errDiscord error
+	var errSmtp error
+
+	errDiscord = notifiers.SendToDiscordWebhook(DISCORDDISABLE, CONFIG.Configuration.DiscordWebHookURL, status, message, color, address, service, networkZone, instanceType, 0, 5*time.Second, 5)
+	errSmtp = notifiers.SendSMTPMail(
+		CONFIG.Configuration.SmtpDisable,
+		CONFIG.Configuration.SmtpUsername,
+		CONFIG.Configuration.SmtpPassword,
+		CONFIG.Configuration.SmtpHost,
+		CONFIG.Configuration.SmtpTo,
+		CONFIG.Configuration.SmtpFrom,
+		CONFIG.Configuration.SmtpPort,
+		status, message, address, service, networkZone, instanceType,
+	)
+
 	if errDiscord != nil {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("notification[DISCORD] :: unable to send discord webhook notification :: [%s]", errDiscord), "error")
+		utils.ConsoleAndLoggerOutput(LOGGER, "DISCORD NOTIFICATION", fmt.Sprintf("Unable to send discord webhook notification :: [%s]", errDiscord), "ERROR")
 	} else {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", "notification[DISCORD] :: successfully sent discord webhook notification]", "info")
+		utils.ConsoleAndLoggerOutput(LOGGER, "DISCORD NOTIFICATION", "Successfully sent discord webhook notification", "INFO")
 	}
 
-	// Notify SMTP
-	errSmtp := notifiers.SendSMTPMail(CONFIG.Configuration.SmtpDisable, CONFIG.Configuration.SmtpUsername, CONFIG.Configuration.SmtpPassword, CONFIG.Configuration.SmtpHost, CONFIG.Configuration.SmtpTo, CONFIG.Configuration.SmtpFrom, CONFIG.Configuration.SmtpPort, status, message, address, service, networkZone, instanceType)
 	if errSmtp != nil {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", fmt.Sprintf("notification[SMTP] :: unable to send smtp push notification :: [%s]", errSmtp), "error")
+		utils.ConsoleAndLoggerOutput(LOGGER, "SMTP NOTIFICATION", fmt.Sprintf("Unable to send smtp push notification :: [%s]", errSmtp), "ERROR")
 	} else {
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", "notification[SMTP] :: successfully sent smtp push notification]", "info")
+		utils.ConsoleAndLoggerOutput(LOGGER, "SMTP NOTIFICATION", "Successfully sent smtp push notification", "INFO")
 	}
 }
 
-func isRunningAsRoot() bool {
-	currentUser, err := user.Current()
-	if err != nil {
-		fmt.Printf("error getting current user: %v\n", err)
-		return false
-	}
-	uid, err := strconv.Atoi(currentUser.Uid)
-	if err != nil {
-		fmt.Printf("error converting UID to integer: %v\n", err)
-		return false
-	}
-	return uid == 0
-}
-
-func checkPrivileges(privilegedMode bool, logger *log.Logger) {
-	if privilegedMode != isRunningAsRoot() {
-		mode := "privileged"
-		userStatus := "unprivileged user"
-		if !privilegedMode {
-			mode = "unprivileged"
-			userStatus = "privileged user"
-		}
-		message := fmt.Sprintf("runtime[MAIN] :: running %s mode with %s", mode, userStatus)
-		utils.ConsoleAndLoggerOutput(logger, "system", message, "error")
-		panic(fmt.Sprintf("error[MAIN] :: running %s mode with %s", mode, userStatus))
+func sendNotificationSystem(message string, status string) {
+	errDiscord := notifiers.SendToDiscordWebhookSystem(DISCORDDISABLE, CONFIG.Configuration.DiscordWebHookURL, status, message, 0x4682B4, 0, 5*time.Second, 5)
+	if errDiscord != nil {
+		utils.ConsoleAndLoggerOutput(LOGGER, "DISCORD NOTIFICATION", fmt.Sprintf("Unable to send discord webhook notification :: [%s]", errDiscord), "ERROR")
+	} else {
+		utils.ConsoleAndLoggerOutput(LOGGER, "DISCORD NOTIFICATION", "Successfully sent discord webhook notification", "INFO")
 	}
 }
 
 func main() {
-	utils.ConsoleAndLoggerOutput(LOGGER, "system", "runtime[MAIN] :: starting service", "info")
-	checkPrivileges(CONFIG.Configuration.PrivilegedMode, LOGGER)
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "Starting Inframon", "INFO")
 
 	var wg sync.WaitGroup
 
@@ -208,14 +212,35 @@ func main() {
 		wg.Add(1)
 		go pingTaskHTTP(httpConfig.Address, httpConfig.Service, httpConfig.RetryBuffer, httpConfig.Timeout, httpConfig.FailureTimeout, httpConfig.SkipVerify, httpConfig.NetworkZone, httpConfig.InstanceType, &wg)
 	}
+
 	wg.Add(1)
 	go healthCheck(HEALTHCHECKTIMEOUT)
 
+	if !CONFIG.Configuration.Stdout {
+		logFileSize := CONFIG.Configuration.LogFileSize
+		logFileSizeConverted, err := utils.ConvertToBytes(logFileSize)
+		if err != nil {
+			panic(fmt.Sprintf("Error rotating logfile. Could not convert input logFileSize in config file: %v", err))
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				time.Sleep(750 * time.Millisecond)
+				err := LOGGER.RotateLogFile(*LOGPATHARG, *LOGNAMEARG, logFileSizeConverted, CONFIG.Configuration.MaxLogFileKeep)
+				if err != nil {
+					utils.ConsoleAndLoggerOutput(LOGGER, "LOG ROTATE", fmt.Sprintf("Error rotating log file: %v", err), "ERROR")
+				}
+			}
+		}()
+	}
+
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	sendNotificationSystem("Shutting Down Inframon", "Inframon Shutting Down")
+	utils.ConsoleAndLoggerOutput(LOGGER, "EXIT", "Shutting down inframon system", "INFO")
 	go func() {
 		<-signalChan
-		utils.ConsoleAndLoggerOutput(LOGGER, "system", "runtime[MAIN] :: shutting down inframon system", "info")
 		os.Exit(0)
 	}()
 	wg.Wait()

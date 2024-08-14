@@ -4,12 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"gopkg.in/yaml.v2"
-	"io"
 	"log"
 	"net/mail"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 )
+
+const loggerFlags = log.Ldate | log.Ltime | log.Lshortfile
 
 type Config struct {
 	ICMP []struct {
@@ -41,6 +46,8 @@ type Config struct {
 		HealthCheckTimeout    int    `yaml:"healthCheckTimeout"`
 		DiscordWebHookDisable bool   `yaml:"discordWebhookDisable"`
 		DiscordWebHookURL     string `yaml:"discordWebhookUrl"`
+		LogFileSize           string `yaml:"logFileSize"`
+		MaxLogFileKeep        int    `yaml:"maxLogFileKeep"`
 		SmtpDisable           bool   `yaml:"smtpDisable"`
 		SmtpHost              string `yaml:"smtpHost"`
 		SmtpPort              string `yaml:"smtpPort"`
@@ -52,9 +59,199 @@ type Config struct {
 }
 
 type LogEntry struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-	Event   string `json:"event"`
+	Type    string `json:"Type"`
+	Message string `json:"Message"`
+	Event   string `json:"Event"`
+}
+
+type SafeLogger struct {
+	mu     sync.Mutex
+	logger *log.Logger
+	file   *os.File
+}
+
+func CheckPrivileges(privilegedMode bool) {
+	if privilegedMode != isRunningAsRoot() {
+		mode := "privileged"
+		userStatus := "unprivileged user"
+		if !privilegedMode {
+			mode = "unprivileged"
+			userStatus = "privileged user"
+		}
+		panic(fmt.Sprintf("Error running %s mode with %s", mode, userStatus))
+	}
+}
+
+func isRunningAsRoot() bool {
+	currentUser, err := user.Current()
+	if err != nil {
+		fmt.Printf("error getting current user: %v\n", err)
+		return false
+	}
+	uid, err := strconv.Atoi(currentUser.Uid)
+	if err != nil {
+		fmt.Printf("error converting UID to integer: %v\n", err)
+		return false
+	}
+	return uid == 0
+}
+
+func (sl *SafeLogger) Log(logType, message, event string) {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+
+	if sl.logger == nil {
+		fmt.Printf("Error: Logger is nil. Message: %s\n", message)
+		return
+	}
+
+	if logType == "" || message == "" || event == "" {
+		fmt.Printf("Error creating log entry: logType, message, and event cannot be empty\n")
+		return
+	}
+
+	logEntry, err := CreateLogEntry(logType, message, event)
+	if err != nil {
+		fmt.Printf("Error creating log entry: %v\n", err)
+		return
+	}
+
+	sl.logger.Print(logEntry)
+}
+
+func (sl *SafeLogger) Rotate(newFilePath string) error {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+
+	newFile, err := os.Create(newFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to create new log file: %v", err)
+	}
+	sl.logger.SetOutput(newFile)
+
+	if sl.file != nil {
+		sl.file.Close()
+	}
+	sl.file = newFile
+	return nil
+}
+
+func CreateLogEntry(Type string, Message string, Event string) (string, error) {
+	logEntry := LogEntry{
+		Type:    Type,
+		Message: Message,
+		Event:   Event,
+	}
+	jsonData, err := json.Marshal(logEntry)
+	if err != nil {
+		return "", fmt.Errorf("unable to serialize to json: %v", err)
+	}
+	return string(jsonData), nil
+}
+
+func ValidateLogDirectory(directoryPath string) error {
+	err := os.MkdirAll(directoryPath, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("unable to create directory: %s", directoryPath)
+	}
+	return nil
+}
+
+func SetupLogger(stdout bool, logPath, logName string) (*SafeLogger, error) {
+	safeLogger := &SafeLogger{
+		mu: sync.Mutex{},
+	}
+
+	if stdout {
+		safeLogger.logger = log.New(os.Stdout, "", loggerFlags)
+		return safeLogger, nil
+	}
+
+	if err := ValidateLogDirectory(logPath); err != nil {
+		return nil, fmt.Errorf("invalid log directory: %v", err)
+	}
+
+	fullPath := filepath.Join(logPath, logName)
+	file, err := os.OpenFile(fullPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file: %v", err)
+	}
+
+	defer func() {
+		if err != nil {
+			file.Close()
+		}
+	}()
+
+	safeLogger.logger = log.New(file, "", loggerFlags)
+	safeLogger.file = file
+	fmt.Printf("Message: Running with output to logfile: %v\n", fullPath)
+	return safeLogger, nil
+}
+
+func (sl *SafeLogger) RotateLogFile(logPath string, logName string, maxSize int64, maxFiles int) error {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+
+	fullPath := filepath.Join(logPath, logName)
+
+	if sl.file == nil {
+		return nil
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to stat log file: %v", err)
+	}
+
+	if info.Size() < maxSize {
+		return nil
+	}
+
+	for i := maxFiles - 1; i > 0; i-- {
+		oldName := fmt.Sprintf("%s.%d", fullPath, i)
+		newName := fmt.Sprintf("%s.%d", fullPath, i+1)
+		if _, err := os.Stat(oldName); !os.IsNotExist(err) {
+			if err := os.Rename(oldName, newName); err != nil {
+				return fmt.Errorf("failed to rename log file: %v", err)
+			}
+		}
+	}
+
+	newPath := fmt.Sprintf("%s.1", fullPath)
+	if err := os.Rename(fullPath, newPath); err != nil {
+		return fmt.Errorf("failed to rename current log file: %v", err)
+	}
+
+	newFile, err := os.Create(fullPath)
+	if err != nil {
+		return fmt.Errorf("failed to create new log file: %v", err)
+	}
+	defer func() {
+		if err != nil {
+			newFile.Close()
+		}
+	}()
+
+	if err := sl.file.Close(); err != nil {
+		return fmt.Errorf("failed to close old log file: %v", err)
+	}
+
+	sl.file = newFile
+	sl.logger.SetOutput(newFile)
+
+	fmt.Printf("Message: Rotating logfile and moving to: %v . Previous logfiles available by visiting file.log.2, file.log.3, file.log.4, file.log.5 \n", newPath)
+	return nil
+}
+
+func ConsoleAndLoggerOutput(logger *SafeLogger, logType string, message string, event string) {
+	logger.Log(logType, message, event)
+	if logType == "ERROR" {
+		fmt.Printf("Error: %s\n", message)
+	}
 }
 
 func LoadConfig(filename string) (*Config, error) {
@@ -81,52 +278,11 @@ func ParseConfig(pathToConfig string) *Config {
 	return config
 }
 
-func CreateLogEntry(Type string, Message string, Event string) (string, error) {
-	logEntry := LogEntry{
-		Type:    Type,
-		Message: Message,
-		Event:   Event,
+func validateICMPField(field, value string, index int) error {
+	if value == "" {
+		return fmt.Errorf("icmp config at index %d has empty %s", index, field)
 	}
-	jsonData, err := json.Marshal(logEntry)
-	if err != nil {
-		return "", fmt.Errorf("unable to serialize to json: %v", err)
-	}
-	return string(jsonData), nil
-}
-
-func ValidateLogDirectory(directoryPath string) {
-	err := os.MkdirAll(directoryPath, os.ModePerm)
-	if err != nil {
-		panic(fmt.Sprintf("message: system :: runtime[LOG] :: unable to create directory: %s", directoryPath))
-	}
-	fmt.Printf("message: system :: runtime[LOG] :: validated %s directory available\n", directoryPath)
-}
-
-func SetupLogger(ConsoleOut bool, directoryPath string, logName string) *log.Logger {
-	var output io.Writer = os.Stdout
-
-	if !ConsoleOut {
-		ValidateLogDirectory(directoryPath)
-		logFilePath := fmt.Sprintf("%s/runtime.log", directoryPath)
-		file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			panic(fmt.Sprintf("message: system :: runtime[LOG] :: unable to open log file: %s", logFilePath))
-		}
-		output = file
-	}
-
-	logger := log.New(output, "event: ", log.Ldate|log.Ltime|log.Lshortfile)
-	log.SetOutput(output)
-	return logger
-}
-
-func ConsoleAndLoggerOutput(logger *log.Logger, Type string, Message string, Event string) {
-	logEntry, err := CreateLogEntry(Type, Message, Event)
-	if err != nil {
-		fmt.Printf("system :: runtime[LOG] :: error creating log entry: %v\n", err)
-		return
-	}
-	logger.Println(logEntry)
+	return nil
 }
 
 func ValidateICMPConfig(icmpConfig []struct {
@@ -140,31 +296,40 @@ func ValidateICMPConfig(icmpConfig []struct {
 }) error {
 	addresses := make(map[string]bool)
 	for i, icmp := range icmpConfig {
-		if icmp.Address == "" {
-			return fmt.Errorf("icmp config at index %d has empty address", i)
+		if err := validateICMPField("address", icmp.Address, i); err != nil {
+			return err
 		}
-		if icmp.Service == "" {
-			return fmt.Errorf("icmp config at index %d has empty service", i)
+		if err := validateICMPField("service", icmp.Service, i); err != nil {
+			return err
 		}
+		if err := validateICMPField("networkZone", icmp.NetworkZone, i); err != nil {
+			return err
+		}
+		if err := validateICMPField("instanceType", icmp.InstanceType, i); err != nil {
+			return err
+		}
+
 		if icmp.Timeout <= 0 {
-			return fmt.Errorf("icmp config at index %d has invalid timeout value", i)
+			return fmt.Errorf("icmp config at index %d has invalid timeout value (should be positive)", i)
 		}
 		if icmp.FailureTimeout <= 0 {
-			return fmt.Errorf("icmp config at index %d has invalid failureTimeout value", i)
+			return fmt.Errorf("icmp config at index %d has invalid failureTimeout value (should be positive)", i)
 		}
 		if icmp.RetryBuffer < 0 {
-			return fmt.Errorf("icmp config at index %d has invalid retrybuffer value", i)
+			return fmt.Errorf("icmp config at index %d has invalid retrybuffer value (should be non-negative)", i)
 		}
-		if icmp.NetworkZone == "" {
-			return fmt.Errorf("icmp config at index %d has empty networkZone", i)
-		}
-		if icmp.InstanceType == "" {
-			return fmt.Errorf("icmp config at index %d has empty instanceType", i)
-		}
+
 		if _, exists := addresses[icmp.Address]; exists {
 			return fmt.Errorf("icmp config at index %d has duplicate address: %s", i, icmp.Address)
 		}
 		addresses[icmp.Address] = true
+	}
+	return nil
+}
+
+func validateNumericField(field string, value, minValue int, index int) error {
+	if value < minValue {
+		return fmt.Errorf("http config at index %d has invalid %s value (should be >= %d)", index, field, minValue)
 	}
 	return nil
 }
@@ -181,27 +346,29 @@ func ValidateHTTPConfig(httpConfig []struct {
 }) error {
 	addresses := make(map[string]bool)
 	for i, http := range httpConfig {
-		if http.Address == "" {
-			return fmt.Errorf("http config at index %d has empty address", i)
+		if err := validateICMPField("address", http.Address, i); err != nil {
+			return err
 		}
-		if http.Service == "" {
-			return fmt.Errorf("http config at index %d has empty service", i)
+		if err := validateICMPField("service", http.Service, i); err != nil {
+			return err
 		}
-		if http.Timeout <= 0 {
-			return fmt.Errorf("http config at index %d has invalid timeout value", i)
+		if err := validateICMPField("networkZone", http.NetworkZone, i); err != nil {
+			return err
 		}
-		if http.FailureTimeout <= 0 {
-			return fmt.Errorf("http config at index %d has invalid failureTimeout value", i)
+		if err := validateICMPField("instanceType", http.InstanceType, i); err != nil {
+			return err
 		}
-		if http.RetryBuffer < 0 {
-			return fmt.Errorf("http config at index %d has invalid retrybuffer value", i)
+
+		if err := validateNumericField("timeout", http.Timeout, 1, i); err != nil {
+			return err
 		}
-		if http.NetworkZone == "" {
-			return fmt.Errorf("http config at index %d has empty networkZone", i)
+		if err := validateNumericField("failureTimeout", http.FailureTimeout, 1, i); err != nil {
+			return err
 		}
-		if http.InstanceType == "" {
-			return fmt.Errorf("http config at index %d has empty instanceType", i)
+		if err := validateNumericField("retryBuffer", http.RetryBuffer, 0, i); err != nil {
+			return err
 		}
+
 		if _, exists := addresses[http.Address]; exists {
 			return fmt.Errorf("http config at index %d has duplicate address: %s", i, http.Address)
 		}
@@ -216,41 +383,38 @@ func ValidateConfiguration(config *Config) error {
 	}
 
 	if !config.Configuration.SmtpDisable {
-		if config.Configuration.SmtpFrom == "" {
-			return fmt.Errorf("smtpFrom cannot be empty when smtpDisable is false")
+		smtpFields := map[string]string{
+			"smtpFrom":     config.Configuration.SmtpFrom,
+			"smtpTo":       config.Configuration.SmtpTo,
+			"smtpHost":     config.Configuration.SmtpHost,
+			"smtpPort":     config.Configuration.SmtpPort,
+			"smtpUsername": config.Configuration.SmtpUsername,
+			"smtpPassword": config.Configuration.SmtpPassword,
 		}
+
+		for field, value := range smtpFields {
+			if value == "" {
+				return fmt.Errorf("%s cannot be empty when smtpDisable is false", field)
+			}
+		}
+
 		if err := validateEmail(config.Configuration.SmtpFrom); err != nil {
 			return fmt.Errorf("smtpFrom is invalid: %v", err)
-		}
-		if config.Configuration.SmtpTo == "" {
-			return fmt.Errorf("smtpTo cannot be empty when smtpDisable is false")
 		}
 		if err := validateEmail(config.Configuration.SmtpTo); err != nil {
 			return fmt.Errorf("smtpTo is invalid: %v", err)
 		}
-		if config.Configuration.SmtpHost == "" {
-			return fmt.Errorf("smtpHost cannot be empty when smtpDisable is false")
-		}
-		if config.Configuration.SmtpPort == "" {
-			return fmt.Errorf("smtpPort cannot be empty when smtpDisable is false")
-		}
 		if err := validatePort(config.Configuration.SmtpPort); err != nil {
 			return fmt.Errorf("smtpPort is invalid: %v", err)
-		}
-		if config.Configuration.SmtpUsername == "" {
-			return fmt.Errorf("smtpUsername cannot be empty when smtpDisable is false")
-		}
-		if config.Configuration.SmtpPassword == "" {
-			return fmt.Errorf("smtpPassword cannot be empty when smtpDisable is false")
 		}
 	}
 
 	if !config.Configuration.Stdout {
-		if config.Configuration.LogFileName == "" {
-			return fmt.Errorf("logFileName cannot be empty")
+		if config.Configuration.LogFileSize == "" {
+			return fmt.Errorf("logFileSize cannot be empty when stdOut is false")
 		}
-		if config.Configuration.LogFileDirectory == "" {
-			return fmt.Errorf("LogFileDirectory cannot be empty")
+		if config.Configuration.MaxLogFileKeep <= 0 {
+			return fmt.Errorf("maxLogFileKeep must be greater than 0 when stdOut is false")
 		}
 	}
 
@@ -259,12 +423,12 @@ func ValidateConfiguration(config *Config) error {
 	}
 
 	if err := ValidateICMPConfig(config.ICMP); err != nil {
-		return fmt.Errorf("icmp config validation failed: %v", err)
+		return fmt.Errorf("ICMP config validation failed: %v", err)
+	}
+	if err := ValidateHTTPConfig(config.HTTP); err != nil {
+		return fmt.Errorf("HTTP config validation failed: %v", err)
 	}
 
-	if err := ValidateHTTPConfig(config.HTTP); err != nil {
-		return fmt.Errorf("http config validation failed: %v", err)
-	}
 	return nil
 }
 
@@ -282,4 +446,33 @@ func validateEmail(email string) error {
 		return fmt.Errorf("invalid email address: %s", email)
 	}
 	return nil
+}
+
+func ConvertToBytes(logFileSize string) (int64, error) {
+	logFileSize = strings.TrimSpace(strings.ToUpper(logFileSize))
+
+	multipliers := map[string]int64{
+		"KB": 1024,
+		"MB": 1024 * 1024,
+	}
+
+	var unit string
+	for u := range multipliers {
+		if strings.HasSuffix(logFileSize, u) {
+			unit = u
+			break
+		}
+	}
+
+	if unit == "" {
+		return 0, fmt.Errorf("invalid unit: input must end with KB or MB")
+	}
+
+	valueStr := strings.TrimSuffix(logFileSize, unit)
+	value, err := strconv.ParseFloat(valueStr, 64)
+	if err != nil || value < 0 {
+		return 0, fmt.Errorf("invalid or negative number: %s", valueStr)
+	}
+
+	return int64(value * float64(multipliers[unit])), nil
 }

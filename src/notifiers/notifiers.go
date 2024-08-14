@@ -57,6 +57,28 @@ func SendToDiscordWebhook(discordWebhookDisable bool, webhookURL string, title s
 	return sendWithRetries(webhookURL, payload, retryCount, rateLimitResetTime, maxRetries)
 }
 
+func SendToDiscordWebhookSystem(discordWebhookDisable bool, webhookURL string, title string, description string, color int, retryCount int, rateLimitResetTime time.Duration, maxRetries int) error {
+	if discordWebhookDisable {
+		return fmt.Errorf("discord webhook notifications disabled")
+	}
+	now := time.Now()
+	embed := DiscordEmbed{
+		Title:       title,
+		Description: description,
+		Color:       color,
+		Fields: []DiscordField{
+			{Name: "Date", Value: now.Format("2006-01-02"), Inline: true},
+			{Name: "Time", Value: now.Format("15:04:05"), Inline: true},
+		},
+	}
+	message := Message{Embeds: []DiscordEmbed{embed}}
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+	return sendWithRetries(webhookURL, payload, retryCount, rateLimitResetTime, maxRetries)
+}
+
 func sendWithRetries(webhookURL string, payload []byte, retryCount int, rateLimitResetTime time.Duration, maxRetries int) error {
 	for i := 0; i <= maxRetries; i++ {
 		err := sendDiscordRequest(webhookURL, payload)

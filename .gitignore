@@ -25,3 +25,10 @@ logs/
 config/
 go.sum
 inframon
+logging/runtime.log
+logging/runtime.log.1
+logging/runtime.log.2
+logging/runtime.log.3
+logging/runtime.log.4
+logging/runtime.log.5
+.DS_Store

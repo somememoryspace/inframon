@@ -20,4 +20,6 @@ COPY --from=builder /inframon/inframon .
 
 ENV CONFIG_PATH=/config/config.yaml
 
+STOPSIGNAL SIGTERM
+
 CMD ["sh", "-c", "./inframon --config=$CONFIG_PATH"]
