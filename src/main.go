@@ -17,11 +17,10 @@ import (
 
 var (
 	MUTEX              sync.Mutex
-	ROOTUSERARG        = flag.String("root_user", "false", "True / False for enabling privileged mode. Default: False")
+	ROOTUSERARG        = flag.Bool("root_user", false, "True / False for enabling privileged mode. Default: False")
 	CONFIGARG          = flag.String("config", "", "path/to/file targeting inframon config.yaml file. Default: Nothing")
 	LOGPATHARG         = flag.String("logpath", "", "path/to/logfile targeting inframon log file. Default: Nothing")
 	LOGNAMEARG         = flag.String("logname", "", "file name for the log file. Default: Nothing")
-	ROOTUSERBOOL       bool
 	CONFIG             *utils.Config
 	LOGGER             *utils.SafeLogger
 	ICMPHEALTH         = make(map[string]bool)
@@ -38,13 +37,8 @@ func init() {
 		log.Fatal("no configuration path provided")
 	}
 
-	ROOTUSERBOOL, boolErr := utils.ConvertStringToBool(*ROOTUSERARG)
-	if boolErr != nil {
-		log.Fatal("incorrect root_user argument. Must be true or false only.")
-	}
-
 	CONFIG = utils.ParseConfig(*CONFIGARG)
-	utils.CheckPrivileges(ROOTUSERBOOL)
+	utils.CheckPrivileges(*ROOTUSERARG)
 
 	var err error
 	LOGGER, err = utils.SetupLogger(CONFIG.Configuration.Stdout, *LOGPATHARG, *LOGNAMEARG)
@@ -323,7 +317,7 @@ func main() {
 	for _, icmpConfig := range CONFIG.ICMP {
 		setHealthStatus(ICMPHEALTH, icmpConfig.Address, true)
 		wg.Add(1)
-		go pingTaskICMP(ROOTUSERBOOL, icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, icmpConfig.Timeout, icmpConfig.FailureTimeout, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg)
+		go pingTaskICMP(*ROOTUSERARG, icmpConfig.Address, icmpConfig.Service, icmpConfig.RetryBuffer, icmpConfig.Timeout, icmpConfig.FailureTimeout, icmpConfig.NetworkZone, icmpConfig.InstanceType, &wg)
 	}
 
 	for _, httpConfig := range CONFIG.HTTP {
