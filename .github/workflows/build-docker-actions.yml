@@ -25,7 +25,7 @@ jobs:
     - name: Generate SBOM Report
       run: |
         mkdir sbom_reports
-        grype --scope all-layers inframon -o cyclonedx -json> sbom_reports/sbom.json
+        grype --scope all-layers inframon -o cyclonedx -json > sbom_reports/sbom.json
 
     - name: Upload SBOM Report
       uses: actions/upload-artifact@v3
