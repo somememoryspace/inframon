@@ -8,6 +8,8 @@ services:
       - CONFIG_PATH=/config/config.yaml
     volumes:
       - ../config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro 
     network_mode: bridge
 
 ###version: '3.8'

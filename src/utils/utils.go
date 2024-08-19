@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"gopkg.in/yaml.v2"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const loggerFlags = log.Ldate | log.Ltime | log.Lshortfile
@@ -39,23 +41,94 @@ type Config struct {
 	} `yaml:"http"`
 
 	Configuration struct {
-		PrivilegedMode        bool   `yaml:"privilegedMode"`
-		LogFileDirectory      string `yaml:"logFileDirectory"`
-		LogFileName           string `yaml:"logFileName"`
-		Stdout                bool   `yaml:"stdOut"`
-		HealthCheckTimeout    int    `yaml:"healthCheckTimeout"`
-		DiscordWebHookDisable bool   `yaml:"discordWebhookDisable"`
-		DiscordWebHookURL     string `yaml:"discordWebhookUrl"`
-		LogFileSize           string `yaml:"logFileSize"`
-		MaxLogFileKeep        int    `yaml:"maxLogFileKeep"`
-		SmtpDisable           bool   `yaml:"smtpDisable"`
-		SmtpHost              string `yaml:"smtpHost"`
-		SmtpPort              string `yaml:"smtpPort"`
-		SmtpUsername          string `yaml:"smtpUsername"`
-		SmtpPassword          string `yaml:"smtpPassword"`
-		SmtpFrom              string `yaml:"smtpFrom"`
-		SmtpTo                string `yaml:"smtpTo"`
+		LogFileDirectory         string `yaml:"logFileDirectory"`
+		LogFileName              string `yaml:"logFileName"`
+		Stdout                   bool   `yaml:"stdOut"`
+		HealthCron               string `yaml:"healthCron"`
+		HealthCronDisable        bool   `yaml:"healthCronDisable"`
+		HealthCronWebhookDisable bool   `yaml:"healthCronWebhookDisable"`
+		HealthCronSmtpDisable    bool   `yaml:"healthCronSmtpDisable"`
+		HealthCheckTimeout       int    `yaml:"healthCheckTimeout"`
+		DiscordWebHookDisable    bool   `yaml:"discordWebhookDisable"`
+		DiscordWebHookURL        string `yaml:"discordWebhookUrl"`
+		LogFileSize              string `yaml:"logFileSize"`
+		MaxLogFileKeep           int    `yaml:"maxLogFileKeep"`
+		SmtpDisable              bool   `yaml:"smtpDisable"`
+		SmtpHost                 string `yaml:"smtpHost"`
+		SmtpPort                 string `yaml:"smtpPort"`
+		SmtpUsername             string `yaml:"smtpUsername"`
+		SmtpPassword             string `yaml:"smtpPassword"`
+		SmtpFrom                 string `yaml:"smtpFrom"`
+		SmtpTo                   string `yaml:"smtpTo"`
 	} `yaml:"configuration"`
+}
+
+type CronSchedule struct {
+	Minute     string
+	Hour       string
+	DayOfMonth string
+	Month      string
+	DayOfWeek  string
+}
+
+func ParseHealthCron(expression string) (*CronSchedule, error) {
+	fields := strings.Fields(expression)
+	if len(fields) != 5 {
+		return nil, errors.New("invalid cron expression: must have 5 fields")
+	}
+
+	return &CronSchedule{
+		Minute:     fields[0],
+		Hour:       fields[1],
+		DayOfMonth: fields[2],
+		Month:      fields[3],
+		DayOfWeek:  fields[4],
+	}, nil
+}
+
+func (c *CronSchedule) Match(t time.Time) bool {
+	return c.matchField(c.Minute, t.Minute()) &&
+		c.matchField(c.Hour, t.Hour()) &&
+		c.matchField(c.DayOfMonth, t.Day()) &&
+		c.matchField(c.Month, int(t.Month())) &&
+		c.matchField(c.DayOfWeek, int(t.Weekday()))
+}
+
+func (c *CronSchedule) matchField(field string, value int) bool {
+	if field == "*" {
+		return true
+	}
+
+	for _, part := range strings.Split(field, ",") {
+		if strings.Contains(part, "-") {
+			rangeParts := strings.Split(part, "-")
+			start, _ := strconv.Atoi(rangeParts[0])
+			end, _ := strconv.Atoi(rangeParts[1])
+			if value >= start && value <= end {
+				return true
+			}
+		} else if strings.Contains(part, "/") {
+			stepParts := strings.Split(part, "/")
+			step, _ := strconv.Atoi(stepParts[1])
+			if value%step == 0 {
+				return true
+			}
+		} else {
+			if fieldValue, err := strconv.Atoi(part); err == nil && fieldValue == value {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func InitCronSchedule(config *Config) (*CronSchedule, error) {
+	return ParseHealthCron(config.Configuration.HealthCron)
+}
+
+func IsScheduledTime(schedule *CronSchedule) bool {
+	return schedule.Match(time.Now())
 }
 
 type LogEntry struct {
@@ -418,6 +491,13 @@ func ValidateConfiguration(config *Config) error {
 		}
 	}
 
+	if config.Configuration.HealthCron != "" {
+		_, err := ParseHealthCron(config.Configuration.HealthCron)
+		if err != nil {
+			return fmt.Errorf("invalid cron expression: %v", err)
+		}
+	}
+
 	if config.Configuration.HealthCheckTimeout <= 0 {
 		return fmt.Errorf("healthCheckTimeout must be greater than 0")
 	}
@@ -475,4 +555,16 @@ func ConvertToBytes(logFileSize string) (int64, error) {
 	}
 
 	return int64(value * float64(multipliers[unit])), nil
+}
+
+func ConvertStringToBool(str string) (bool, error) {
+	normalizedStr := strings.ToLower(strings.TrimSpace(str))
+	switch normalizedStr {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, errors.New("invalid input: must be 'true' or 'false'")
+	}
 }
