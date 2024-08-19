@@ -10,28 +10,21 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
-    - name: Build the Container image
+    - name: Build the Container Image
       working-directory: scripts
       run: ./builddocker.sh
 
     - name: Setup Grype
-      run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
-
-    - name: Generate SBOM Report
       run: |
-        mkdir sbom_reports
-        grype --scope all-layers inframon -o cyclonedx -json > sbom_reports/sbom.json
-
-    - name: Upload SBOM Report
-      uses: actions/upload-artifact@v3
-      with:
-        name: sbom-report
-        path: sbom_reports/inframon.json
+        curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+        # Check for installation errors
+        if [ $? -ne 0 ]; then exit 1; fi
 
     - name: Login to Docker Hub
       uses: docker/login-action@v3
@@ -45,3 +38,17 @@ jobs:
         push: true
         platforms: linux/amd64,linux/arm64
         tags: ${{ secrets.DOCKER_USERNAME }}/inframon:latest
+
+    - name: Generate SBOM Report
+      run: |
+        mkdir -p sbom_reports
+        # Ensure the image name matches your built image
+        grype sbom ${{ secrets.DOCKER_USERNAME }}/inframon:latest --output cyclonedx > sbom_reports/sbom.xml
+        # Check if SBOM generation failed
+        if [ $? -ne 0 ]; then exit 1; fi
+
+    - name: Upload SBOM Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: sbom-report
+        path: sbom_reports/sbom.json
