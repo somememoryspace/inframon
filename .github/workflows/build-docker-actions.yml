@@ -7,7 +7,70 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-scan:
+  build-and-publish-binaries:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            go-arch: amd64
+          - arch: arm64
+            go-arch: arm64
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22.5'
+
+    - name: Build binary
+      env:
+        GOOS: linux
+        GOARCH: ${{ matrix.go-arch }}
+      run: |
+        go build -o inframon-${{ matrix.arch }} ./cmd/inframon
+        tar -czvf inframon-${{ matrix.arch }}.tar.gz inframon-${{ matrix.arch }}
+
+    - name: Get version
+      id: get_version
+      run: echo "VERSION=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_CR }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        release_name: Release ${{ steps.get_version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./inframon-${{ matrix.arch }}.tar.gz
+        asset_name: inframon-${{ matrix.arch }}.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: inframon-${{ matrix.arch }}-binary
+        path: inframon-${{ matrix.arch }}.tar.gz
+
+  build-and-scan-container:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -94,8 +157,8 @@ jobs:
         path: sbom_reports/sbom-${{ matrix.arch }}.json
 
   push-images:
-    needs: build-and-scan
-    if: needs.build-and-scan.outputs.scan_passed_amd64 == 'true' && needs.build-and-scan.outputs.scan_passed_arm64 == 'true'
+    needs: [build-and-scan-container]
+    if: needs.build-and-scan-container.outputs.scan_passed_amd64 == 'true' && needs.build-and-scan-container.outputs.scan_passed_arm64 == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -128,70 +191,4 @@ jobs:
       run: |
         if [ ! -f image_tars/inframon-amd64.tar ] || [ ! -f image_tars/inframon-arm64.tar ]; then
           echo "artifacts_exist=false" >> $GITHUB_OUTPUT
-          echo "Error: One or both artifacts are missing. Skipping push."
-        else
-          echo "artifacts_exist=true" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Load images
-      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
-      run: |
-        docker load < image_tars/inframon-amd64.tar
-        docker load < image_tars/inframon-arm64.tar
-
-    - name: Login to GitHub Container Registry
-      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Push images and add metadata
-      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
-      run: |
-        # Function to tag, push, and add metadata
-        push_and_label() {
-          local arch=$1
-          local image_name="ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:${arch}"
-          
-          # Tag the image
-          docker tag local/inframon:${arch} ${image_name}
-          
-          # Add metadata and push
-          docker buildx build --platform linux/${arch} \
-            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-            --label "org.opencontainers.image.description=InfraMon Docker Image" \
-            --label "org.opencontainers.image.licenses=MIT" \
-            -t ${image_name} -o type=image,push=true .
-        }
-
-        # Push and label AMD64 image
-        push_and_label amd64
-
-        # Push and label ARM64 image
-        push_and_label arm64
-
-    - name: Create and push multi-arch manifest
-      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
-      run: |
-        # Create and push the multi-arch manifest
-        docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest \
-          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64 \
-          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:arm64
-
-        # Add metadata to link package to repository
-        docker manifest annotate ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest \
-          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64 --os linux --arch amd64
-
-        docker manifest annotate ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest \
-          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:arm64 --os linux --arch arm64
-
-        docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest
-
-        # Add metadata to the latest tag
-        docker buildx build --platform linux/amd64,linux/arm64 \
-          --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-          --label "org.opencontainers.image.description=InfraMon Docker Image" \
-          --label "org.opencontainers.image.licenses=MIT" \
-          -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest -o type=image,push=true .
+          echo "Error: One or both artifacts are missing. Skip
