@@ -12,6 +12,9 @@ jobs:
       matrix:
         arch: [amd64, arm64]
     runs-on: ubuntu-latest
+    outputs:
+      scan_passed_amd64: ${{ steps.set_output.outputs.scan_passed_amd64 }}
+      scan_passed_arm64: ${{ steps.set_output.outputs.scan_passed_arm64 }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -20,7 +23,7 @@ jobs:
       uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
 
     - name: Install Trivy
       run: |
@@ -35,33 +38,44 @@ jobs:
         docker buildx build --platform linux/${{ matrix.arch }} -t local/inframon:${{ matrix.arch }} --load .
 
     - name: Run Trivy vulnerability scanner
+      id: trivy
       run: |
         mkdir -p scan_results
-        trivy image --exit-code 1 --severity HIGH,CRITICAL --format table --output scan_results/trivy-results-${{ matrix.arch }}.txt local/inframon:${{ matrix.arch }}
-      continue-on-error: true
+        if trivy image --exit-code 1 --severity HIGH,CRITICAL --format table --output scan_results/trivy-results-${{ matrix.arch }}.txt local/inframon:${{ matrix.arch }}; then
+          echo "scan_status=passed" >> $GITHUB_OUTPUT
+        else
+          echo "scan_status=failed" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Check scan results
+      id: scan
+      run: |
+        if [ "${{ steps.trivy.outputs.scan_status }}" = "passed" ]; then
+          echo "No HIGH or CRITICAL vulnerabilities found for ${{ matrix.arch }}"
+          echo "scan_passed=true" >> $GITHUB_OUTPUT
+        else
+          echo "Vulnerabilities found for ${{ matrix.arch }}"
+          cat scan_results/trivy-results-${{ matrix.arch }}.txt
+          echo "scan_passed=false" >> $GITHUB_OUTPUT
+        fi
 
     - name: Generate SBOM
       run: |
         mkdir -p sbom_reports
         trivy image --format json --output sbom_reports/sbom-${{ matrix.arch }}.json local/inframon:${{ matrix.arch }}
 
-    - name: Check scan results
-      id: scan
+    - name: Set job output
+      id: set_output
       run: |
-        if [ -s scan_results/trivy-results-${{ matrix.arch }}.txt ]; then
-          echo "Vulnerabilities found for ${{ matrix.arch }}"
-          cat scan_results/trivy-results-${{ matrix.arch }}.txt
-          echo "scan_passed=false" >> $GITHUB_OUTPUT
-        else
-          echo "No vulnerabilities found for ${{ matrix.arch }}"
-          echo "scan_passed=true" >> $GITHUB_OUTPUT
-        fi
+        echo "scan_passed_${{ matrix.arch }}=${{ steps.scan.outputs.scan_passed }}" >> $GITHUB_OUTPUT
+        echo "Scan passed for ${{ matrix.arch }}: ${{ steps.scan.outputs.scan_passed }}"
 
     - name: Save image to tar
       if: steps.scan.outputs.scan_passed == 'true'
       run: |
         mkdir -p image_tars
         docker save local/inframon:${{ matrix.arch }} > image_tars/inframon-${{ matrix.arch }}.tar
+        echo "Image saved to tar for ${{ matrix.arch }}"
 
     - name: Upload image tar
       if: steps.scan.outputs.scan_passed == 'true'
@@ -82,10 +96,22 @@ jobs:
         name: sbom-${{ matrix.arch }}
         path: sbom_reports/sbom-${{ matrix.arch }}.json
 
+    - name: Debug Output
+      run: |
+        echo "Scan passed: ${{ steps.scan.outputs.scan_passed }}"
+        echo "Artifact upload condition: ${{ steps.scan.outputs.scan_passed == 'true' }}"
+        ls -l image_tars || echo "image_tars directory not found"
+
   push-images:
     needs: build-and-scan
+    if: needs.build-and-scan.outputs.scan_passed_amd64 == 'true' && needs.build-and-scan.outputs.scan_passed_arm64 == 'true'
     runs-on: ubuntu-latest
     steps:
+    - name: Debug Build Outputs
+      run: |
+        echo "Scan passed (amd64): ${{ needs.build-and-scan.outputs.scan_passed_amd64 }}"
+        echo "Scan passed (arm64): ${{ needs.build-and-scan.outputs.scan_passed_arm64 }}"
+
     - name: Download amd64 image
       uses: actions/download-artifact@v4
       with:
@@ -98,12 +124,24 @@ jobs:
         name: inframon-arm64-image
         path: image_tars
 
+    - name: Check if artifacts exist
+      id: check_artifacts
+      run: |
+        if [ ! -f image_tars/inframon-amd64.tar ] || [ ! -f image_tars/inframon-arm64.tar ]; then
+          echo "artifacts_exist=false" >> $GITHUB_OUTPUT
+          echo "Error: One or both artifacts are missing. Skipping push."
+        else
+          echo "artifacts_exist=true" >> $GITHUB_OUTPUT
+        fi
+
     - name: Load images
+      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       run: |
         docker load < image_tars/inframon-amd64.tar
         docker load < image_tars/inframon-arm64.tar
 
     - name: Login to GitHub Container Registry
+      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
@@ -111,6 +149,7 @@ jobs:
         password: ${{ secrets.GH_CR }}
 
     - name: Push images
+      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       run: |
         docker tag local/inframon:amd64 ghcr.io/${{ github.repository }}/inframon:amd64
         docker tag local/inframon:arm64 ghcr.io/${{ github.repository }}/inframon:arm64
@@ -118,6 +157,7 @@ jobs:
         docker push ghcr.io/${{ github.repository }}/inframon:arm64
 
     - name: Create and push multi-arch manifest
+      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       run: |
         docker manifest create ghcr.io/${{ github.repository }}/inframon:latest \
           ghcr.io/${{ github.repository }}/inframon:amd64 \
