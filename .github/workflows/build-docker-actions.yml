@@ -11,16 +11,18 @@ jobs:
     strategy:
       matrix:
         arch: [amd64, arm64]
-    runs-on: ubuntu-latest
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-latest-arm64
+    runs-on: ${{ matrix.runner }}
     outputs:
       scan_passed_amd64: ${{ steps.set_output.outputs.scan_passed_amd64 }}
       scan_passed_arm64: ${{ steps.set_output.outputs.scan_passed_arm64 }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -96,12 +98,6 @@ jobs:
         name: sbom-${{ matrix.arch }}
         path: sbom_reports/sbom-${{ matrix.arch }}.json
 
-    - name: Debug Output
-      run: |
-        echo "Scan passed: ${{ steps.scan.outputs.scan_passed }}"
-        echo "Artifact upload condition: ${{ steps.scan.outputs.scan_passed == 'true' }}"
-        ls -l image_tars || echo "image_tars directory not found"
-
   push-images:
     needs: build-and-scan
     if: needs.build-and-scan.outputs.scan_passed_amd64 == 'true' && needs.build-and-scan.outputs.scan_passed_arm64 == 'true'
@@ -110,10 +106,11 @@ jobs:
       contents: read
       packages: write
     steps:
-    - name: Debug Build Outputs
-      run: |
-        echo "Scan passed (amd64): ${{ needs.build-and-scan.outputs.scan_passed_amd64 }}"
-        echo "Scan passed (arm64): ${{ needs.build-and-scan.outputs.scan_passed_arm64 }}"
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
     - name: Set lowercase repository name
       run: |
@@ -155,33 +152,40 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Push images
+    - name: Push images and add metadata
       if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       run: |
-        docker tag local/inframon:amd64 ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64
-        docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64
+        # Function to tag, push, and add metadata
+        push_and_label() {
+          local arch=$1
+          local image_name="ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:${arch}"
+          
+          # Tag the image
+          docker tag local/inframon:${arch} ${image_name}
+          
+          # Add metadata and push
+          docker buildx build --platform linux/${arch} \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.description=InfraMon Docker Image" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            -t ${image_name} -o type=image,push=true .
+        }
 
-        docker tag local/inframon:arm64 ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:arm64
-        docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:arm64
+        # Push and label AMD64 image
+        push_and_label amd64
 
-        echo "Adding metadata to link package to repository"
-        docker buildx imagetools create \
-          -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64 \
-          --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64
-
-        docker buildx imagetools create \
-          -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:arm64 \
-          --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:arm64
+        # Push and label ARM64 image
+        push_and_label arm64
 
     - name: Create and push multi-arch manifest
       if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       run: |
+        # Create and push the multi-arch manifest
         docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest \
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64 \
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:arm64
 
+        # Add metadata to link package to repository
         docker manifest annotate ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest \
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:amd64 --os linux --arch amd64
 
@@ -190,8 +194,9 @@ jobs:
 
         docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest
 
-        echo "Adding metadata to link package to repository for latest tag"
-        docker buildx imagetools create \
-          -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest \
+        # Add metadata to the latest tag
+        docker buildx build --platform linux/amd64,linux/arm64 \
           --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest
+          --label "org.opencontainers.image.description=InfraMon Docker Image" \
+          --label "org.opencontainers.image.licenses=MIT" \
+          -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}:latest -o type=image,push=true .
