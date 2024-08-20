@@ -59,7 +59,7 @@ jobs:
     - name: Generate SBOM
       if: success()
       run: |
-        trivy image --format cyclonedx-json --output sbom-report-${{ matrix.platform }}.json ghcr.io/${{ github.repository }}/inframon:latest
+        trivy image --format json --output sbom-report-${{ matrix.platform }}.json ghcr.io/${{ github.repository }}/inframon:latest
 
     - name: Publish SBOM
       if: success()
