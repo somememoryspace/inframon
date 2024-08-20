@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build-amd64:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -24,15 +24,53 @@ jobs:
         sudo apt-get update
         sudo apt-get install trivy
 
-    - name: Build the Container Image
-      working-directory: scripts
-      run: ./builddocker.sh
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GH_CR }}
 
-    - name: Run Trivy to Generate SBOM and Scan for Vulnerabilities
+    - name: Build and Push AMD64 Container Image
+      uses: docker/build-push-action@v6
+      with:
+        push: true
+        platforms: linux/amd64
+        tags: ghcr.io/${{ github.repository }}/inframon:amd64-latest
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.description=Image for ${{ github.repository }} (AMD64)
+          org.opencontainers.image.licenses=MIT
+
+    - name: Run Trivy for AMD64 and Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom.json inframon:latest
+        trivy image --format json --output sbom_reports/sbom_amd64.json ghcr.io/${{ github.repository }}/inframon:amd64-latest
         if [ $? -ne 0 ]; then exit 1; fi
+
+    - name: Publish SBOM for AMD64
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-report-amd64
+        path: sbom_reports/sbom_amd64.json
+
+  build-arm64:
+    runs-on: ubuntu-latest
+    needs: build-amd64
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Install Trivy
+      run: |
+        sudo apt-get install wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install trivy
 
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
@@ -41,19 +79,25 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GH_CR }}
 
-    - name: Build and Push Container Image
+    - name: Build and Push ARM64 Container Image
       uses: docker/build-push-action@v6
       with:
         push: true
-        platforms: linux/amd64,linux/arm64
-        tags: ghcr.io/${{ github.repository }}/inframon:latest
+        platforms: linux/arm64
+        tags: ghcr.io/${{ github.repository }}/inframon:arm64-latest
         labels: |
           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          org.opencontainers.image.description=Image for ${{ github.repository }}
+          org.opencontainers.image.description=Image for ${{ github.repository }} (ARM64)
           org.opencontainers.image.licenses=MIT
 
-    - name: Publish SBOM as a Package
+    - name: Run Trivy for ARM64 and Generate SBOM
+      run: |
+        mkdir -p sbom_reports
+        trivy image --format json --output sbom_reports/sbom_arm64.json ghcr.io/${{ github.repository }}/inframon:arm64-latest
+        if [ $? -ne 0 ]; then exit 1; fi
+
+    - name: Publish SBOM for ARM64
       uses: actions/upload-artifact@v4
       with:
-        name: sbom-report
-        path: sbom_reports/sbom.json
+        name: sbom-report-arm64
+        path: sbom_reports/sbom_arm64.json
