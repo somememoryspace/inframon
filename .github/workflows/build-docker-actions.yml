@@ -12,7 +12,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -30,14 +32,14 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build and Push Container Image
+    - name: Build Container Image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: false
         load: true
-        platforms: linux/amd64,linux/arm64
-        tags: ghcr.io/${{ github.repository }}/inframon:latest
+        platforms: ${{ matrix.platform }}
+        tags: ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}
         labels: |
           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           org.opencontainers.image.description=Image for ${{ github.repository }}
@@ -53,7 +55,7 @@ jobs:
 
     - name: Run Trivy Vulnerability Scanner
       run: |
-        trivy image --format table --exit-code 1 --ignore-unfixed --vuln-type os,library --severity CRITICAL,HIGH 'ghcr.io/${{ github.repository }}/inframon:latest'
+        trivy image --format table --exit-code 1 --ignore-unfixed --vuln-type os,library --severity CRITICAL,HIGH 'ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}'
 
     - name: Push Container Image
       if: success()
@@ -61,8 +63,8 @@ jobs:
       with:
         context: .
         push: true
-        platforms: linux/amd64,linux/arm64
-        tags: ghcr.io/${{ github.repository }}/inframon:latest
+        platforms: ${{ matrix.platform }}
+        tags: ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}
         labels: |
           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           org.opencontainers.image.description=Image for ${{ github.repository }}
@@ -71,11 +73,29 @@ jobs:
     - name: Generate SBOM
       if: success()
       run: |
-        trivy image --format json --output sbom-report.json 'ghcr.io/${{ github.repository }}/inframon:latest'
+        trivy image --format cyclonedx-json --output sbom-report-${{ matrix.platform }}.json 'ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}'
 
     - name: Publish SBOM
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: sbom-report
-        path: sbom-report.json
+        name: sbom-report-${{ matrix.platform }}
+        path: sbom-report-${{ matrix.platform }}.json
+
+  create-manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create and Push Manifest
+      run: |
+        docker manifest create ghcr.io/${{ github.repository }}/inframon:latest \
+          ghcr.io/${{ github.repository }}/inframon:latest-linux/amd64 \
+          ghcr.io/${{ github.repository }}/inframon:latest-linux/arm64
+        docker manifest push ghcr.io/${{ github.repository }}/inframon:latest
