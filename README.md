@@ -2,9 +2,7 @@
 
 ## Current Releases
 [![Build Docker Image](https://github.com/somememoryspace/inframon/actions/workflows/build-docker-actions.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-docker-actions.yml)
-
 [![Build Go Binary](https://github.com/somememoryspace/inframon/actions/workflows/build-go-actions.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-go-actions.yml)
-
 
 ## Ready to Use Features
 - **ICMP Monitoring**: Ping servers and network devices to check their availability.
@@ -21,18 +19,16 @@
 - **Routine Bugfixes**: Corrective bugfixes as they are discovered and reported.
 - **Refinements**: Ongoing changes to output format for Discord Webhook and SMTP Notifications.
 - **Secrets Management**: Migrate credentials in config file to a secure secrets management solution.
+
 ---
 
 ## Docker Deployment
-```bash
-$ git clone https://github.com/somememoryspace/inframon
-```
 
-### Build the Image
+### Pull the Container Image
+You can pull the pre-built container image from the GitHub Container Registry:
+
 ```bash
-$ cd scripts
-$ ./builddocker.sh
-$ cd ../
+$ docker pull ghcr.io/somememoryspace/inframon/inframon:latest
 ```
 
 ### Create a Docker Directory and an Empty Compose File
@@ -43,16 +39,16 @@ $ touch docker-compose.yaml
 ```
 
 ### Example Compose File
-```bash
+```yaml
 version: '3.8'
 services:
   inframon:
     container_name: inframon
-    image: inframon:latest
+    image: ghcr.io/somememoryspace/inframon/inframon:latest
     environment:
       - CONFIG_PATH=/config/config.yaml
     volumes:
-      - ../config:/config
+      - ./config:/config
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro 
     network_mode: bridge
@@ -75,9 +71,7 @@ $ docker logs --follow inframon
 2024/08/19 00:40:33 utils.go:192: {"Type":"STARTUP","Message":"Starting Inframon","Event":"INFO"}
 ```
 
-
 ---
-
 
 ## Kubernetes Deployment
 
@@ -89,7 +83,7 @@ $ kubectl create namespace inframon
 ```
 
 ### Create a ConfigMap (Example)
-```bash
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -128,7 +122,7 @@ $ kubectl apply -f inframon-configmap.yaml
 ```
 
 ### Create a Deployment
-```bash
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -146,8 +140,8 @@ spec:
     spec:
       containers:
       - name: inframon
-        image: inframon:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/somememoryspace/inframon/inframon:latest
+        imagePullPolicy: Always
         args: ["--config", "/config/config.yaml"]
         volumeMounts:
         - name: config
@@ -181,7 +175,6 @@ $ kubectl logs -f deployment/inframon -n inframon
 
 ---
 
-
 ## Classic Deployment
 ### Get Repository
 ```bash
@@ -196,13 +189,13 @@ $ cd ../
 ```
 
 ### Place Binary Into Appropriate Directory
-```
+```bash
 $ mv ./inframon /usr/local/bin/inframon
 $ chmod +x /usr/local/bin/inframon
 ```
 
 ### Example systemD file running on LXC:
-```bash
+```ini
 [Unit]
 Description=Inframon Service
 After=network.target
