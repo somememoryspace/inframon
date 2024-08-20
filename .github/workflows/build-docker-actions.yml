@@ -36,7 +36,7 @@ jobs:
         GOOS: linux
         GOARCH: ${{ matrix.go-arch }}
       run: |
-        go build -o inframon-${{ matrix.arch }} ./cmd/inframon
+        go build -o inframon-${{ matrix.arch }} ./src
         tar -czvf inframon-${{ matrix.arch }}.tar.gz inframon-${{ matrix.arch }}
 
     - name: Get version
