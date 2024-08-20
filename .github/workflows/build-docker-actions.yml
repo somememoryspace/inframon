@@ -52,9 +52,8 @@ jobs:
           org.opencontainers.image.description=Image for ${{ github.repository }}
           org.opencontainers.image.licenses=MIT
 
-    - name: Publish SBOM
-      if: success()
+    - name: Publish SBOM as a Package
       uses: actions/upload-artifact@v4
       with:
-        name: sbom-report-${{ matrix.platform }}
-        path: sbom-report-${{ matrix.platform }}.json
+        name: sbom-report
+        path: sbom_reports/sbom.json
