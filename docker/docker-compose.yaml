@@ -3,7 +3,7 @@ version: '3.8'
 services:
   inframon:
     container_name: inframon
-    image: memoryspace/inframon:latest
+    image: ghcr.io/somememoryspace/inframon/inframon:dev
     environment:
       - CONFIG_PATH=/config/config.yaml
     volumes:
