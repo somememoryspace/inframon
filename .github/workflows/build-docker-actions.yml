@@ -24,12 +24,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 0  # Fetch all history for all tags and branches
 
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.22.5'
+        go-version: '1.21'
 
     - name: Build binary
       env:
@@ -37,13 +37,38 @@ jobs:
         GOARCH: ${{ matrix.go-arch }}
       run: |
         go build -o inframon-${{ matrix.arch }} ./src
-        tar -czvf inframon-${{ matrix.arch }}.tar.gz inframon-${{ matrix.arch }}
+
+    - name: Package binary
+      run: tar -czvf inframon-${{ matrix.arch }}.tar.gz inframon-${{ matrix.arch }}
 
     - name: Get version
       id: get_version
       run: echo "VERSION=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
 
+    - name: Check for existing release
+      id: check_release
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{secrets.GH_CR}}
+        script: |
+          try {
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: '${{ steps.get_version.outputs.VERSION }}'
+            });
+            core.setOutput('release_id', release.data.id);
+            core.setOutput('upload_url', release.data.upload_url);
+            return 'exists';
+          } catch (e) {
+            if (e.status === 404) {
+              return 'not found';
+            }
+            throw e;
+          }
+
     - name: Create Release
+      if: steps.check_release.outputs.result == 'not found'
       id: create_release
       uses: actions/create-release@v1
       env:
@@ -57,9 +82,9 @@ jobs:
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GH_CR }}
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        upload_url: ${{ steps.check_release.outputs.upload_url || steps.create_release.outputs.upload_url }}
         asset_path: ./inframon-${{ matrix.arch }}.tar.gz
         asset_name: inframon-${{ matrix.arch }}.tar.gz
         asset_content_type: application/gzip
