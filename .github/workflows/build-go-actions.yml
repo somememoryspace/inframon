@@ -1,4 +1,4 @@
-name: Binary Multi-arch Build, and Push
+name: Binary Multi-arch Build and Release
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-push:
+  build-and-release:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         arch: [amd64, arm64]
-        go-version: [1.21.x]
+        go-version: [1.22.5]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -27,29 +27,28 @@ jobs:
         GOOS: linux
         GOARCH: ${{ matrix.arch }}
       run: |
-        go build -o inframon-${{ matrix.arch }} ./src
+        go build -o inframon-linux-${{ matrix.arch }} ./src
 
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
       with:
-        name: inframon-${{ matrix.arch }}
-        path: inframon-${{ matrix.arch }}
+        name: inframon-linux-${{ matrix.arch }}
+        path: inframon-linux-${{ matrix.arch }}
 
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GH_CR }}
-
-    - name: Set lowercase repository name
+    - name: Generate release tag
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
-        echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "RELEASE_TAG=v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-    - name: Push binary to GitHub Packages
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ env.RELEASE_TAG }}
+        name: Release ${{ env.RELEASE_TAG }}
+        draft: false
+        prerelease: false
+        files: |
+          inframon-linux-${{ matrix.arch }}
       env:
         GITHUB_TOKEN: ${{ secrets.GH_CR }}
-      run: |
-        echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u $ --password-stdin
-        docker build -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ matrix.arch }}-${{ github.sha }} --build-arg ARCH=${{ matrix.arch }} .
-        docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ matrix.arch }}-${{ github.sha }}
