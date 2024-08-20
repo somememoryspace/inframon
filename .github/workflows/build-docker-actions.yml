@@ -26,12 +26,12 @@ jobs:
 
     - name: Build AMD64 Container Image
       run: |
-        docker buildx build --platform linux/amd64 -t inframon:amd64-latest .
+        docker buildx build --platform linux/amd64 -t inframon:latest .
 
     - name: Run Trivy for AMD64 and Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom_amd64.json inframon:amd64-latest
+        trivy image --format json --output sbom_reports/sbom_amd64.json inframon:latest
         if [ $? -ne 0 ]; then exit 1; fi
 
     - name: Publish SBOM for AMD64
@@ -72,12 +72,12 @@ jobs:
 
     - name: Build ARM64 Container Image
       run: |
-        docker buildx build --platform linux/arm64 -t inframon:arm64-latest .
+        docker buildx build --platform linux/arm64 -t inframon:latest .
 
     - name: Run Trivy for ARM64 and Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom_arm64.json inframon:arm64-latest
+        trivy image --format json --output sbom_reports/sbom_arm64.json inframon:latest
         if [ $? -ne 0 ]; then exit 1; fi
 
     - name: Publish SBOM for ARM64
