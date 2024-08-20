@@ -8,21 +8,16 @@ on:
 
 jobs:
   build-and-scan:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         arch: [amd64, arm64]
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-latest-arm64
-    runs-on: ${{ matrix.runner }}
-    outputs:
-      scan_passed_amd64: ${{ steps.set_output.outputs.scan_passed_amd64 }}
-      scan_passed_arm64: ${{ steps.set_output.outputs.scan_passed_arm64 }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
