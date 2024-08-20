@@ -1,10 +1,8 @@
-name: (Release) Build, Push Container Image, Scan, and Publish SBOM Report
+name: (Development) Build, Push Container Image, Scan, and Publish SBOM Report
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ "dev" ]
 
 jobs:
   build-and-scan:
@@ -26,20 +24,12 @@ jobs:
 
     - name: Build Container Image
       run: |
-        docker buildx build --platform linux/amd64,linux/arm64 -t inframon:latest .
-
-    - name: List Docker Images
-      run: docker images
-
-    - name: Debug Docker Commands
-      run: |
-        docker images
-        docker inspect inframon:latest
+        docker buildx build --platform linux/amd64,linux/arm64 -t inframon:dev .
 
     - name: Run Trivy for Container Image and Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom_latest.json inframon:latest
+        trivy image --format json --output sbom_reports/sbom_latest.json inframon:dev
         if [ $? -ne 0 ]; then exit 1; fi
 
     - name: Publish SBOMs
@@ -57,5 +47,5 @@ jobs:
 
     - name: Push Container Image
       run: |
-        docker tag inframon:latest ghcr.io/${{ github.repository }}/inframon:latest
-        docker push ghcr.io/${{ github.repository }}/inframon:latest
+        docker tag inframon:dev ghcr.io/${{ github.repository }}/inframon:dev
+        docker push ghcr.io/${{ github.repository }}/inframon:dev
