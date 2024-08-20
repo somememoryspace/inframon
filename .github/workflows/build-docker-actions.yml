@@ -35,17 +35,18 @@ jobs:
       uses: docker/build-push-action@v6
       with:
         push: true
-        platforms: linux/amd64
-        tags: ghcr.io/${{ github.repository }}/inframon:amd64-latest
+        platforms: linux/amd64,linux/arm64
+        tags: |
+          ghcr.io/${{ github.repository }}/inframon:latest
         labels: |
           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          org.opencontainers.image.description=Image for ${{ github.repository }} (AMD64)
+          org.opencontainers.image.description=Image for ${{ github.repository }}
           org.opencontainers.image.licenses=MIT
 
     - name: Run Trivy for AMD64 and Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom_amd64.json ghcr.io/${{ github.repository }}/inframon:amd64-latest
+        trivy image --format json --output sbom_reports/sbom_amd64.json ghcr.io/${{ github.repository }}/inframon:latest
         if [ $? -ne 0 ]; then exit 1; fi
 
     - name: Publish SBOM for AMD64
@@ -84,16 +85,17 @@ jobs:
       with:
         push: true
         platforms: linux/arm64
-        tags: ghcr.io/${{ github.repository }}/inframon:arm64-latest
+        tags: |
+          ghcr.io/${{ github.repository }}/inframon:latest
         labels: |
           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          org.opencontainers.image.description=Image for ${{ github.repository }} (ARM64)
+          org.opencontainers.image.description=Image for ${{ github.repository }}
           org.opencontainers.image.licenses=MIT
 
     - name: Run Trivy for ARM64 and Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom_arm64.json ghcr.io/${{ github.repository }}/inframon:arm64-latest
+        trivy image --format json --output sbom_reports/sbom_arm64.json ghcr.io/${{ github.repository }}/inframon:latest
         if [ $? -ne 0 ]; then exit 1; fi
 
     - name: Publish SBOM for ARM64

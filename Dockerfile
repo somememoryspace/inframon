@@ -1,5 +1,7 @@
 FROM golang:1.22.5-alpine AS builder
 
+LABEL org.opencontainers.image.source https://github.com/somememoryspace/inframon
+
 WORKDIR /inframon
 
 RUN apk add --no-cache git
