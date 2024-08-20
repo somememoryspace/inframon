@@ -31,7 +31,7 @@ jobs:
     - name: Run Trivy to Generate SBOM and Scan for Vulnerabilities
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom.json ./inframon:latest
+        trivy image --format json --output sbom_reports/sbom.json inframon:latest
         if [ $? -ne 0 ]; then exit 1; fi
 
     - name: Login to GitHub Container Registry
