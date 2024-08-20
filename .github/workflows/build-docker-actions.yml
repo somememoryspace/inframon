@@ -1,4 +1,4 @@
-name: Multi-arch Build, Scan, and Push with Repository Linking
+name: OCI Build, Scan, and Push
 
 on:
   push:

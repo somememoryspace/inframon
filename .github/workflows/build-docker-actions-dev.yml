@@ -1,4 +1,4 @@
-name: (Development) Build, Push Container Image, Scan, and Publish SBOM Report
+name: OCI Build, Scan, and Push for Development
 
 on:
   push:
