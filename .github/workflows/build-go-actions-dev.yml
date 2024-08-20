@@ -1,0 +1,69 @@
+name: Binary Multi-arch Build for Development
+
+on:
+  push:
+    branches: [ "dev" ]
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
+        include:
+          - os: ubuntu-latest
+            goos: linux
+          - os: macos-latest
+            goos: darwin
+        exclude:
+          - os: macos-latest
+            arch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Display build configuration
+      run: |
+        echo "Building for OS: ${{ matrix.goos }}, Arch: ${{ matrix.arch }}, on ${{ matrix.os }}"
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.22.5
+
+    - name: Build Go binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.arch }}
+      run: |
+        go build -o inframon-${{ matrix.goos }}-${{ matrix.arch }} ./src
+
+    - name: Run tests
+      run: go test ./...
+
+    - name: Generate SHA256 checksum
+      run: |
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          sha256sum inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+        elif [ "${{ runner.os }}" == "macOS" ]; then
+          shasum -a 256 inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+        else
+          echo "Unsupported OS for SHA256 generation"
+          exit 1
+        fi
+        echo "SHA256 checksum for inframon-${{ matrix.goos }}-${{ matrix.arch }}:"
+        cat inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: inframon-${{ matrix.goos }}-${{ matrix.arch }}
+        path: |
+          inframon-${{ matrix.goos }}-${{ matrix.arch }}
+          inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+
+    - name: Print SHA256 checksums
+      run: |
+        echo "SHA256 checksums for inframon binaries:"
+        cat inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256

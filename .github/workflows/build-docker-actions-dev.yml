@@ -5,14 +5,28 @@ on:
     branches: [ "dev" ]
 
 jobs:
-  build-and-scan:
+  build-scan-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set lowercase repository name
+      run: |
+        echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "Repository name set to: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
 
     - name: Install Trivy
       run: |
@@ -24,21 +38,39 @@ jobs:
 
     - name: Build Container Image
       run: |
-        docker buildx build --platform linux/amd64,linux/arm64 -t inframon:dev .
+        docker buildx build --platform linux/${{ matrix.arch }} \
+          -t local/inframon:dev-${{ matrix.arch }} \
+          --load .
 
-    - name: Run Trivy for Container Image and Generate SBOM
+    - name: Run Trivy vulnerability scanner
+      run: |
+        mkdir -p scan_results
+        trivy image --exit-code 0 --severity HIGH,CRITICAL --format table \
+          --output scan_results/trivy-results-${{ matrix.arch }}.txt \
+          local/inframon:dev-${{ matrix.arch }}
+        echo "Vulnerabilities found for ${{ matrix.arch }}:"
+        cat scan_results/trivy-results-${{ matrix.arch }}.txt
+
+    - name: Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom_latest.json inframon:dev
-        if [ $? -ne 0 ]; then exit 1; fi
+        trivy image --format json \
+          --output sbom_reports/sbom-${{ matrix.arch }}.json \
+          local/inframon:dev-${{ matrix.arch }}
 
-    - name: Publish SBOMs
+    - name: Upload scan results
       uses: actions/upload-artifact@v4
       with:
-        name: sbom-report
-        path: sbom_reports/sbom_latest.json
+        name: trivy-scan-results-${{ matrix.arch }}
+        path: scan_results/trivy-results-${{ matrix.arch }}.txt
 
-    - name: Login to GitHub Container Registry
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-${{ matrix.arch }}
+        path: sbom_reports/sbom-${{ matrix.arch }}.json
+
+    - name: Log in to GitHub Container Registry
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
@@ -47,5 +79,30 @@ jobs:
 
     - name: Push Container Image
       run: |
-        docker tag inframon:dev ghcr.io/${{ github.repository }}/inframon:dev
-        docker push ghcr.io/${{ github.repository }}/inframon:dev
+        docker tag local/inframon:dev-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+        docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+
+  create-multiarch-manifest:
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+    - name: Set lowercase repository name
+      run: |
+        echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GH_CR }}
+
+    - name: Create and push multi-arch manifest
+      run: |
+        docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev \
+          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-amd64 \
+          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-arm64
+
+        docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev
