@@ -30,16 +30,15 @@ jobs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.GH_CR }}
 
-    - name: Build Container Image
+    - name: Build and Push Container Image
       uses: docker/build-push-action@v5
       with:
         context: .
-        push: false
-        load: true
+        push: true
         platforms: ${{ matrix.platform }}
-        tags: ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}
+        tags: ghcr.io/${{ github.repository }}/inframon:latest
         labels: |
           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           org.opencontainers.image.description=Image for ${{ github.repository }}
@@ -55,25 +54,12 @@ jobs:
 
     - name: Run Trivy Vulnerability Scanner
       run: |
-        trivy image --format table --exit-code 1 --ignore-unfixed --vuln-type os,library --severity CRITICAL,HIGH 'ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}'
-
-    - name: Push Container Image
-      if: success()
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        platforms: ${{ matrix.platform }}
-        tags: ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}
-        labels: |
-          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          org.opencontainers.image.description=Image for ${{ github.repository }}
-          org.opencontainers.image.licenses=MIT
+        trivy image --format table --exit-code 1 --ignore-unfixed --vuln-type os,library --severity CRITICAL,HIGH ghcr.io/${{ github.repository }}/inframon:latest
 
     - name: Generate SBOM
       if: success()
       run: |
-        trivy image --format cyclonedx-json --output sbom-report-${{ matrix.platform }}.json 'ghcr.io/${{ github.repository }}/inframon:latest-${{ matrix.platform }}'
+        trivy image --format cyclonedx-json --output sbom-report-${{ matrix.platform }}.json ghcr.io/${{ github.repository }}/inframon:latest
 
     - name: Publish SBOM
       if: success()
@@ -96,6 +82,6 @@ jobs:
     - name: Create and Push Manifest
       run: |
         docker manifest create ghcr.io/${{ github.repository }}/inframon:latest \
-          ghcr.io/${{ github.repository }}/inframon:latest-linux-amd64 \
-          ghcr.io/${{ github.repository }}/inframon:latest-linux-arm64
+          --amend ghcr.io/${{ github.repository }}/inframon:latest-linux-amd64 \
+          --amend ghcr.io/${{ github.repository }}/inframon:latest-linux-arm64
         docker manifest push ghcr.io/${{ github.repository }}/inframon:latest
