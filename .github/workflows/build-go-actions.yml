@@ -18,7 +18,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go-version }}
 
@@ -29,11 +29,19 @@ jobs:
       run: |
         go build -o inframon-linux-${{ matrix.arch }} ./src
 
+    - name: Generate SHA256 checksum
+      run: |
+        sha256sum inframon-linux-${{ matrix.arch }} > inframon-linux-${{ matrix.arch }}.sha256
+        echo "SHA256 checksum for inframon-linux-${{ matrix.arch }}:"
+        cat inframon-linux-${{ matrix.arch }}.sha256
+
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
       with:
         name: inframon-linux-${{ matrix.arch }}
-        path: inframon-linux-${{ matrix.arch }}
+        path: |
+          inframon-linux-${{ matrix.arch }}
+          inframon-linux-${{ matrix.arch }}.sha256
 
     - name: Generate release tag
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -50,5 +58,11 @@ jobs:
         prerelease: false
         files: |
           inframon-linux-${{ matrix.arch }}
+          inframon-linux-${{ matrix.arch }}.sha256
       env:
         GITHUB_TOKEN: ${{ secrets.GH_CR }}
+
+    - name: Print SHA256 checksums
+      run: |
+        echo "SHA256 checksums for inframon binaries:"
+        cat inframon-linux-*.sha256
