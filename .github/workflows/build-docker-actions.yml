@@ -7,149 +7,110 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-scan-container:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-    outputs:
-      scan_passed_amd64: ${{ steps.set_output.outputs.scan_passed_amd64 }}
-      scan_passed_arm64: ${{ steps.set_output.outputs.scan_passed_arm64 }}
-    steps:
-    # ... [Previous steps remain unchanged]
-
-    - name: Set job output
-      id: set_output
-      run: |
-        echo "scan_passed_${{ matrix.arch }}=${{ steps.scan.outputs.scan_passed }}" >> $GITHUB_OUTPUT
-        echo "Scan passed for ${{ matrix.arch }}: ${{ steps.scan.outputs.scan_passed }}"
-
-  push-images:
-    needs: [build-and-scan-container]
-    if: |
-      needs.build-and-scan-container.outputs.scan_passed_amd64 == 'true' &&
-      needs.build-and-scan-container.outputs.scan_passed_arm64 == 'true'
+  build-scan-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     steps:
-    - name: Debug - Check Condition Variables
-      run: |
-        echo "scan_passed_amd64: ${{ needs.build-and-scan-container.outputs.scan_passed_amd64 }}"
-        echo "scan_passed_arm64: ${{ needs.build-and-scan-container.outputs.scan_passed_arm64 }}"
-        echo "Condition evaluation: ${{ needs.build-and-scan-container.outputs.scan_passed_amd64 == 'true' && needs.build-and-scan-container.outputs.scan_passed_arm64 == 'true' }}"
-
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Set lowercase repository name
-      run: |
-        echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-        echo "Repository name set to: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
-
-    - name: Download amd64 image
-      uses: actions/download-artifact@v4
-      with:
-        name: inframon-amd64-image
-        path: image_tars
-
-    - name: Download arm64 image
-      uses: actions/download-artifact@v4
-      with:
-        name: inframon-arm64-image
-        path: image_tars
-
-    - name: Check if artifacts exist
-      id: check_artifacts
-      run: |
-        if [ ! -f image_tars/inframon-amd64.tar ] || [ ! -f image_tars/inframon-arm64.tar ]; then
-          echo "artifacts_exist=false" >> $GITHUB_OUTPUT
-          echo "Error: One or both artifacts are missing. Skipping push."
-        else
-          echo "artifacts_exist=true" >> $GITHUB_OUTPUT
-          echo "Both artifacts found."
-        fi
-
-    - name: Debug - List downloaded artifacts
-      run: |
-        echo "Contents of image_tars directory:"
-        ls -l image_tars/
-
     - name: Log in to GitHub Container Registry
-      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GH_CR }}
 
-    - name: Debug - Check Docker Login
-      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
+    - name: Set lowercase repository name
       run: |
-        echo "Checking Docker login status..."
-        docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GH_CR }}
-        if [ $? -eq 0 ]; then
-          echo "Login successful"
+        echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "Repository name set to: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
+
+    - name: Install Trivy
+      run: |
+        sudo apt-get install wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install trivy
+
+    - name: Build and Push Container Image
+      run: |
+        docker buildx build --platform linux/${{ matrix.arch }} \
+          -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ matrix.arch }} \
+          --push .
+
+    - name: Run Trivy vulnerability scanner
+      run: |
+        mkdir -p scan_results
+        if trivy image --exit-code 1 --severity HIGH,CRITICAL --format table \
+          --output scan_results/trivy-results-${{ matrix.arch }}.txt \
+          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ matrix.arch }}; then
+          echo "No HIGH or CRITICAL vulnerabilities found for ${{ matrix.arch }}"
         else
-          echo "Login failed"
+          echo "Vulnerabilities found for ${{ matrix.arch }}"
+          cat scan_results/trivy-results-${{ matrix.arch }}.txt
           exit 1
         fi
 
-    - name: Push images to GitHub Packages
-      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
+    - name: Generate SBOM
       run: |
-        # Load images from tar files
-        echo "Loading amd64 image..."
-        docker load < image_tars/inframon-amd64.tar
-        echo "Loading arm64 image..."
-        docker load < image_tars/inframon-arm64.tar
+        mkdir -p sbom_reports
+        trivy image --format json \
+          --output sbom_reports/sbom-${{ matrix.arch }}.json \
+          ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ matrix.arch }}
 
-        # List loaded images
-        echo "Loaded Docker images:"
-        docker images
+    - name: Upload scan results
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-scan-results-${{ matrix.arch }}
+        path: scan_results/trivy-results-${{ matrix.arch }}.txt
 
-        # Tag images for GitHub Packages
-        echo "Tagging images..."
-        docker tag local/inframon:amd64 ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64
-        docker tag local/inframon:arm64 ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-${{ matrix.arch }}
+        path: sbom_reports/sbom-${{ matrix.arch }}.json
 
-        # Push images to GitHub Packages
-        echo "Pushing amd64 image..."
-        docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64
-        if [ $? -ne 0 ]; then
-          echo "Failed to push amd64 image"
-          exit 1
-        fi
+  create-multiarch-manifest:
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+    - name: Set lowercase repository name
+      run: |
+        echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-        echo "Pushing arm64 image..."
-        docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64
-        if [ $? -ne 0 ]; then
-          echo "Failed to push arm64 image"
-          exit 1
-        fi
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GH_CR }}
 
-        # Create and push multi-arch manifest
-        echo "Creating multi-arch manifest..."
+    - name: Create and push multi-arch manifest
+      run: |
         docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest \
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64 \
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64
 
-        echo "Pushing multi-arch manifest..."
         docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest
-        if [ $? -ne 0 ]; then
-          echo "Failed to push multi-arch manifest"
-          exit 1
-        fi
 
     - name: Debug - List GHCR Contents
-      if: always()
       run: |
         echo "Listing GHCR contents..."
-        docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GH_CR }}
         echo "Attempting to pull latest image..."
         docker pull ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest || echo "Failed to pull latest image"
         echo "Attempting to pull amd64 image..."
@@ -160,7 +121,6 @@ jobs:
         docker images
 
     - name: Debug - Check Package Visibility
-      if: always()
       run: |
         echo "Checking package visibility..."
         curl -H "Authorization: Bearer ${{ secrets.GH_CR }}" \
