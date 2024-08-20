@@ -1,9 +1,10 @@
 # Inframon: Stupid Easy Infrastructure Monitoring
 
 ## Current Releases
-![Build Docker Image](https://github.com/somememoryspace/inframon/actions/workflows/build-docker-actions.yml/badge.svg)
+[![Build Docker Image](https://github.com/somememoryspace/inframon/actions/workflows/build-docker-actions.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-docker-actions.yml)
 
-![Build Go Binary](https://github.com/somememoryspace/inframon/actions/workflows/build-go-actions.yml/badge.svg)
+[![Build Go Binary](https://github.com/somememoryspace/inframon/actions/workflows/build-go-actions.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-go-actions.yml)
+
 
 ## Ready to Use Features
 - **ICMP Monitoring**: Ping servers and network devices to check their availability.
