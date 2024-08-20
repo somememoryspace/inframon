@@ -12,16 +12,36 @@ jobs:
     permissions:
       contents: read
       packages: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
 
-    - name: Build the Container Image
-      working-directory: scripts
-      run: ./builddocker.sh
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and Push Container Image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: false
+        load: true
+        platforms: linux/amd64,linux/arm64
+        tags: ghcr.io/${{ github.repository }}/inframon:latest
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.description=Image for ${{ github.repository }}
+          org.opencontainers.image.licenses=MIT
 
     - name: Install Trivy
       run: |
@@ -31,34 +51,27 @@ jobs:
         sudo apt-get update
         sudo apt-get install trivy
 
-    - name: Build and Save Container Image
-      uses: docker/build-push-action@v6
-      with:
-        push: false
-        load: true
-        tags: ghcr.io/${{ github.repository }}/inframon:latest
-
     - name: Run Trivy Vulnerability Scanner
       run: |
         trivy image --format table --exit-code 1 --ignore-unfixed --vuln-type os,library --severity CRITICAL,HIGH 'ghcr.io/${{ github.repository }}/inframon:latest'
 
-    - name: Login to GitHub Container Registry
-      if: success()
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
     - name: Push Container Image
       if: success()
-      run: |
-        docker push ghcr.io/${{ github.repository }}/inframon:latest
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        platforms: linux/amd64,linux/arm64
+        tags: ghcr.io/${{ github.repository }}/inframon:latest
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.description=Image for ${{ github.repository }}
+          org.opencontainers.image.licenses=MIT
 
     - name: Generate SBOM
       if: success()
       run: |
-        trivy image --format cyclonedx-json --output sbom-report.json 'ghcr.io/${{ github.repository }}/inframon:latest'
+        trivy image --format json --output sbom-report.json 'ghcr.io/${{ github.repository }}/inframon:latest'
 
     - name: Publish SBOM
       if: success()
