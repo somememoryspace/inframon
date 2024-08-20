@@ -8,11 +8,20 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, arm64]
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            arch: amd64
+          - os: ubuntu-latest
+            goos: linux
+            arch: arm64
+          - os: macos-latest
+            goos: darwin
+            arch: arm64
         go-version: [1.22.5]
+    runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -24,24 +33,31 @@ jobs:
 
     - name: Build Go binary
       env:
-        GOOS: linux
+        GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.arch }}
       run: |
-        go build -o inframon-linux-${{ matrix.arch }} ./src
+        go build -o inframon-${{ matrix.goos }}-${{ matrix.arch }} ./src
 
     - name: Generate SHA256 checksum
       run: |
-        sha256sum inframon-linux-${{ matrix.arch }} > inframon-linux-${{ matrix.arch }}.sha256
-        echo "SHA256 checksum for inframon-linux-${{ matrix.arch }}:"
-        cat inframon-linux-${{ matrix.arch }}.sha256
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          sha256sum inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+        elif [ "${{ runner.os }}" == "macOS" ]; then
+          shasum -a 256 inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+        else
+          echo "Unsupported OS for SHA256 generation"
+          exit 1
+        fi
+        echo "SHA256 checksum for inframon-${{ matrix.goos }}-${{ matrix.arch }}:"
+        cat inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
 
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
       with:
-        name: inframon-linux-${{ matrix.arch }}
+        name: inframon-${{ matrix.goos }}-${{ matrix.arch }}
         path: |
-          inframon-linux-${{ matrix.arch }}
-          inframon-linux-${{ matrix.arch }}.sha256
+          inframon-${{ matrix.goos }}-${{ matrix.arch }}
+          inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
 
     - name: Generate release tag
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -57,12 +73,12 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          inframon-linux-${{ matrix.arch }}
-          inframon-linux-${{ matrix.arch }}.sha256
+          inframon-${{ matrix.goos }}-${{ matrix.arch }}
+          inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
       env:
         GITHUB_TOKEN: ${{ secrets.GH_CR }}
 
     - name: Print SHA256 checksums
       run: |
         echo "SHA256 checksums for inframon binaries:"
-        cat inframon-linux-*.sha256
+        cat inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
