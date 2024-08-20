@@ -11,37 +11,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
-      - name: Install Gitleaks
-        run: |
-          wget https://github.com/zricethezav/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
-          tar -xzf gitleaks_8.18.1_linux_x64.tar.gz
-          sudo mv gitleaks /usr/local/bin/
-
-      - name: Run Gitleaks on all commits
-        run: |
-          gitleaks detect --source . --verbose --report-format json --report-path gitleaks-report.json
-        continue-on-error: true
-
-      - name: Check Gitleaks result
-        run: |
-          if [ -s gitleaks-report.json ]; then
-            echo "Gitleaks has detected potential secrets in the repository history."
-            echo "Please review the Gitleaks report and remove any sensitive information before proceeding."
-            echo "Detected secrets:"
-            cat gitleaks-report.json
-            exit 1
-          else
-            echo "No secrets detected by Gitleaks."
-          fi
-
-      - name: Upload Gitleaks report
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: gitleaks-report
-          path: gitleaks-report.json
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-scan-and-push:
     runs-on: ubuntu-latest
