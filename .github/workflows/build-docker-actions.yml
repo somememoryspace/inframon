@@ -110,6 +110,7 @@ jobs:
     - name: Set lowercase repository name
       run: |
         echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "Repository name set to: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
 
     - name: Download amd64 image
       uses: actions/download-artifact@v4
@@ -131,7 +132,13 @@ jobs:
           echo "Error: One or both artifacts are missing. Skipping push."
         else
           echo "artifacts_exist=true" >> $GITHUB_OUTPUT
+          echo "Both artifacts found."
         fi
+
+    - name: Debug - List downloaded artifacts
+      run: |
+        echo "Contents of image_tars directory:"
+        ls -l image_tars/
 
     - name: Log in to GitHub Container Registry
       if: steps.check_artifacts.outputs.artifacts_exist == 'true'
@@ -141,24 +148,82 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GH_CR }}
 
+    - name: Debug - Check Docker Login
+      if: steps.check_artifacts.outputs.artifacts_exist == 'true'
+      run: |
+        echo "Checking Docker login status..."
+        docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GH_CR }}
+        if [ $? -eq 0 ]; then
+          echo "Login successful"
+        else
+          echo "Login failed"
+          exit 1
+        fi
+
     - name: Push images to GitHub Packages
       if: steps.check_artifacts.outputs.artifacts_exist == 'true'
       run: |
         # Load images from tar files
+        echo "Loading amd64 image..."
         docker load < image_tars/inframon-amd64.tar
+        echo "Loading arm64 image..."
         docker load < image_tars/inframon-arm64.tar
 
+        # List loaded images
+        echo "Loaded Docker images:"
+        docker images
+
         # Tag images for GitHub Packages
+        echo "Tagging images..."
         docker tag local/inframon:amd64 ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64
         docker tag local/inframon:arm64 ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64
 
         # Push images to GitHub Packages
+        echo "Pushing amd64 image..."
         docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64
+        if [ $? -ne 0 ]; then
+          echo "Failed to push amd64 image"
+          exit 1
+        fi
+
+        echo "Pushing arm64 image..."
         docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64
+        if [ $? -ne 0 ]; then
+          echo "Failed to push arm64 image"
+          exit 1
+        fi
 
         # Create and push multi-arch manifest
+        echo "Creating multi-arch manifest..."
         docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest \
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64 \
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64
 
+        echo "Pushing multi-arch manifest..."
         docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest
+        if [ $? -ne 0 ]; then
+          echo "Failed to push multi-arch manifest"
+          exit 1
+        fi
+
+    - name: Debug - List GHCR Contents
+      if: always()
+      run: |
+        echo "Listing GHCR contents..."
+        docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GH_CR }}
+        echo "Attempting to pull latest image..."
+        docker pull ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest || echo "Failed to pull latest image"
+        echo "Attempting to pull amd64 image..."
+        docker pull ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64 || echo "Failed to pull amd64 image"
+        echo "Attempting to pull arm64 image..."
+        docker pull ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64 || echo "Failed to pull arm64 image"
+        echo "Listing all Docker images:"
+        docker images
+
+    - name: Debug - Check Package Visibility
+      if: always()
+      run: |
+        echo "Checking package visibility..."
+        curl -H "Authorization: Bearer ${{ secrets.GH_CR }}" \
+             -H "Accept: application/vnd.github.v3+json" \
+             https://api.github.com/user/packages?package_type=container
