@@ -1,5 +1,10 @@
 # Inframon: Stupid Easy Infrastructure Monitoring
 
+## Current Releases
+![Build Docker Image](https://github.com/somememoryspace/inframon/actions/workflows/build-docker-actions.yml/badge.svg)
+
+![Build Go Binary](https://github.com/somememoryspace/inframon/actions/workflows/build-go-actions.yml/badge.svg)
+
 ## Ready to Use Features
 - **ICMP Monitoring**: Ping servers and network devices to check their availability.
 - **HTTP Monitoring**: Check the health of web services and APIs.
