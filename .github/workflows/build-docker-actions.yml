@@ -1,4 +1,4 @@
-name: Multi-arch Build, Scan, and Conditional Push
+name: Multi-arch Build, Scan, and Push with Repository Linking
 
 on:
   push:
@@ -106,6 +106,9 @@ jobs:
     needs: build-and-scan
     if: needs.build-and-scan.outputs.scan_passed_amd64 == 'true' && needs.build-and-scan.outputs.scan_passed_arm64 == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - name: Debug Build Outputs
       run: |
@@ -146,20 +149,49 @@ jobs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GH_CR }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Push images
       if: steps.check_artifacts.outputs.artifacts_exist == 'true'
+      env:
+        GITHUB_REPOSITORY_LOWERCASE: ${{ lowercase(github.repository) }}
       run: |
-        docker tag local/inframon:amd64 ghcr.io/${{ github.repository }}/inframon:amd64
-        docker tag local/inframon:arm64 ghcr.io/${{ github.repository }}/inframon:arm64
-        docker push ghcr.io/${{ github.repository }}/inframon:amd64
-        docker push ghcr.io/${{ github.repository }}/inframon:arm64
+        docker tag local/inframon:amd64 ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:amd64
+        docker push ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:amd64
+
+        docker tag local/inframon:arm64 ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:arm64
+        docker push ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:arm64
+
+        echo "Adding metadata to link package to repository"
+        docker buildx imagetools create \
+          -t ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:amd64 \
+          --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+          ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:amd64
+
+        docker buildx imagetools create \
+          -t ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:arm64 \
+          --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+          ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:arm64
 
     - name: Create and push multi-arch manifest
       if: steps.check_artifacts.outputs.artifacts_exist == 'true'
+      env:
+        GITHUB_REPOSITORY_LOWERCASE: ${{ lowercase(github.repository) }}
       run: |
-        docker manifest create ghcr.io/${{ github.repository }}/inframon:latest \
-          ghcr.io/${{ github.repository }}/inframon:amd64 \
-          ghcr.io/${{ github.repository }}/inframon:arm64
-        docker manifest push ghcr.io/${{ github.repository }}/inframon:latest
+        docker manifest create ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:latest \
+          ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:amd64 \
+          ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:arm64
+
+        docker manifest annotate ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:latest \
+          ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:amd64 --os linux --arch amd64
+
+        docker manifest annotate ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:latest \
+          ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:arm64 --os linux --arch arm64
+
+        docker manifest push ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:latest
+
+        echo "Adding metadata to link package to repository for latest tag"
+        docker buildx imagetools create \
+          -t ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:latest \
+          --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+          ghcr.io/${GITHUB_REPOSITORY_LOWERCASE}:latest
