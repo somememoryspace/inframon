@@ -112,22 +112,3 @@ jobs:
           ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64
 
         docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest
-
-    - name: Debug - List GHCR Contents
-      run: |
-        echo "Listing GHCR contents..."
-        echo "Attempting to pull latest image..."
-        docker pull ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest || echo "Failed to pull latest image"
-        echo "Attempting to pull amd64 image..."
-        docker pull ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:amd64 || echo "Failed to pull amd64 image"
-        echo "Attempting to pull arm64 image..."
-        docker pull ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:arm64 || echo "Failed to pull arm64 image"
-        echo "Listing all Docker images:"
-        docker images
-
-    - name: Debug - Check Package Visibility
-      run: |
-        echo "Checking package visibility..."
-        curl -H "Authorization: Bearer ${{ secrets.GH_CR }}" \
-             -H "Accept: application/vnd.github.v3+json" \
-             https://api.github.com/user/packages?package_type=container
