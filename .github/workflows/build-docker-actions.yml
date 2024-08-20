@@ -1,4 +1,4 @@
-name: (Release) Build, Push Container Image, Scan, and Publish SBOM Report
+name: Multi-arch Build, Scan, and Conditional Push
 
 on:
   push:
@@ -8,10 +8,16 @@ on:
 
 jobs:
   build-and-scan:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -26,27 +32,76 @@ jobs:
 
     - name: Build Container Image
       run: |
-        docker buildx build --platform linux/amd64,linux/arm64 -t inframon:latest .
+        docker buildx build --platform linux/${{ matrix.arch }} -t local/inframon:${{ matrix.arch }} --load .
 
-    - name: List Docker Images
-      run: docker images
-
-    - name: Debug Docker Commands
+    - name: Run Trivy vulnerability scanner
       run: |
-        docker images
-        docker inspect inframon:latest
+        mkdir -p scan_results
+        trivy image --exit-code 1 --severity HIGH,CRITICAL --format table --output scan_results/trivy-results-${{ matrix.arch }}.txt local/inframon:${{ matrix.arch }}
+      continue-on-error: true
 
-    - name: Run Trivy for Container Image and Generate SBOM
+    - name: Generate SBOM
       run: |
         mkdir -p sbom_reports
-        trivy image --format json --output sbom_reports/sbom_latest.json inframon:latest
-        if [ $? -ne 0 ]; then exit 1; fi
+        trivy image --format json --output sbom_reports/sbom-${{ matrix.arch }}.json local/inframon:${{ matrix.arch }}
 
-    - name: Publish SBOMs
+    - name: Check scan results
+      id: scan
+      run: |
+        if [ -s scan_results/trivy-results-${{ matrix.arch }}.txt ]; then
+          echo "Vulnerabilities found for ${{ matrix.arch }}"
+          cat scan_results/trivy-results-${{ matrix.arch }}.txt
+          echo "scan_passed=false" >> $GITHUB_OUTPUT
+        else
+          echo "No vulnerabilities found for ${{ matrix.arch }}"
+          echo "scan_passed=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Save image to tar
+      if: steps.scan.outputs.scan_passed == 'true'
+      run: |
+        mkdir -p image_tars
+        docker save local/inframon:${{ matrix.arch }} > image_tars/inframon-${{ matrix.arch }}.tar
+
+    - name: Upload image tar
+      if: steps.scan.outputs.scan_passed == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: sbom-report
-        path: sbom_reports/sbom_latest.json
+        name: inframon-${{ matrix.arch }}-image
+        path: image_tars/inframon-${{ matrix.arch }}.tar
+
+    - name: Upload scan results
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-scan-results-${{ matrix.arch }}
+        path: scan_results/trivy-results-${{ matrix.arch }}.txt
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-${{ matrix.arch }}
+        path: sbom_reports/sbom-${{ matrix.arch }}.json
+
+  push-images:
+    needs: build-and-scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download amd64 image
+      uses: actions/download-artifact@v4
+      with:
+        name: inframon-amd64-image
+        path: image_tars
+
+    - name: Download arm64 image
+      uses: actions/download-artifact@v4
+      with:
+        name: inframon-arm64-image
+        path: image_tars
+
+    - name: Load images
+      run: |
+        docker load < image_tars/inframon-amd64.tar
+        docker load < image_tars/inframon-arm64.tar
 
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
@@ -55,7 +110,16 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GH_CR }}
 
-    - name: Push Container Image
+    - name: Push images
       run: |
-        docker tag inframon:latest ghcr.io/${{ github.repository }}/inframon:latest
-        docker push ghcr.io/${{ github.repository }}/inframon:latest
+        docker tag local/inframon:amd64 ghcr.io/${{ github.repository }}/inframon:amd64
+        docker tag local/inframon:arm64 ghcr.io/${{ github.repository }}/inframon:arm64
+        docker push ghcr.io/${{ github.repository }}/inframon:amd64
+        docker push ghcr.io/${{ github.repository }}/inframon:arm64
+
+    - name: Create and push multi-arch manifest
+      run: |
+        docker manifest create ghcr.io/${{ github.repository }}/inframon:latest \
+          ghcr.io/${{ github.repository }}/inframon:amd64 \
+          ghcr.io/${{ github.repository }}/inframon:arm64
+        docker manifest push ghcr.io/${{ github.repository }}/inframon:latest
