@@ -10,17 +10,16 @@ jobs:
   build-and-release:
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
         include:
           - os: ubuntu-latest
             goos: linux
-            arch: amd64
-          - os: ubuntu-latest
-            goos: linux
-            arch: arm64
           - os: macos-latest
             goos: darwin
-            arch: arm64
-        go-version: [1.22.5]
+        exclude:
+          - os: macos-latest
+            arch: amd64
     runs-on: ${{ matrix.os }}
     steps:
     - name: Display build configuration
@@ -33,7 +32,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: 1.22.5
 
     - name: Build Go binary
       env:
