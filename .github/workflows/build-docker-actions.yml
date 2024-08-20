@@ -96,6 +96,6 @@ jobs:
     - name: Create and Push Manifest
       run: |
         docker manifest create ghcr.io/${{ github.repository }}/inframon:latest \
-          ghcr.io/${{ github.repository }}/inframon:latest-linux/amd64 \
-          ghcr.io/${{ github.repository }}/inframon:latest-linux/arm64
+          ghcr.io/${{ github.repository }}/inframon:latest-linux-amd64 \
+          ghcr.io/${{ github.repository }}/inframon:latest-linux-arm64
         docker manifest push ghcr.io/${{ github.repository }}/inframon:latest
