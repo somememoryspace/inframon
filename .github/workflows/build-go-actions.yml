@@ -27,7 +27,7 @@ jobs:
         GOOS: linux
         GOARCH: ${{ matrix.arch }}
       run: |
-        go build -o inframon-${{ matrix.arch }} .
+        go build -o inframon-${{ matrix.arch }} ./src
 
     - name: Upload binary artifact
       uses: actions/upload-artifact@v4
