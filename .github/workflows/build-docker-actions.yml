@@ -48,7 +48,7 @@ jobs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GH_CR }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Push Container Image
       if: success()
@@ -58,11 +58,11 @@ jobs:
     - name: Generate SBOM
       if: success()
       run: |
-        trivy image --format cyclonedx --output sbom-report.xml 'ghcr.io/${{ github.repository }}/inframon:latest'
+        trivy image --format cyclonedx-json --output sbom-report.json 'ghcr.io/${{ github.repository }}/inframon:latest'
 
     - name: Publish SBOM
       if: success()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sbom-report
-        path: sbom-report.xml
+        path: sbom-report.json
