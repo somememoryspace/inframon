@@ -22,13 +22,62 @@
 
 ---
 
+## Define Configuration File
+Define a configuration file to load in ICMP or HTTP based monitors. Additionally, define instance specific configuration. 
+```yaml
+icmp:
+  - address: "10.91.255.214"
+    service: "SomeMachine"
+    timeout: 5
+    failureTimeout: 10
+    retryBuffer: 5
+    networkZone: "DMZ"
+    instanceType: "VirtualMachine"
+
+http:
+  - address: "https://loadbalancer.domain.net"
+    service: "service-loadbalancer"
+    timeout: 60
+    failureTimeout: 10
+    skipVerify: true
+    retryBuffer: 5
+    networkZone: "GATEWAYS"
+    instanceType: "LXC"
+
+configuration:
+    stdOut: true
+    healthCheckTimeout: 5
+    discordWebhookDisable: false
+    healthCron: "0 */12 * * *"
+    healthCronWDisable: true    
+    healthCronWebhookDisable: false
+    healthCronSmtpDisable: false
+    discordWebhookUrl: "https://discord.com/api/webhooks/***********************************"
+    smtpDisable: false
+    logFileSize: "10MB"
+    maxLogFileKeep: 5
+    smtpHost: "smtp.sendgrid.net"
+    smtpPort: "587"
+    smtpFrom: "donotreply@domain.net"
+    smtpUsername: "USERNAME"
+    smtpPassword: "PASSWORD"
+    smtpTo: "email@domain.net"
+
+```
+
 ## Docker Deployment
 
 ### Pull the Container Image
 You can pull the pre-built container image from the GitHub Container Registry:
 
+#### Latest Image
 ```bash
 $ docker pull ghcr.io/somememoryspace/inframon/inframon:latest
+```
+
+#### Development Image
+```bash
+$ docker pull ghcr.io/somememoryspace/inframon/inframon:dev
 ```
 
 ### Create a Docker Directory and an Empty Compose File
