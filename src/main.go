@@ -139,7 +139,7 @@ func pingTaskHTTP(address string, service string, retryBuffer int, timeout int, 
 			utils.ConsoleAndLoggerOutput(LOGGER, "HTTP OK", fmt.Sprintf("Address: [%s] Service: [%s] NetworkZone: [%s] InstanceType: [%s] Response: [%d]", address, service, networkZone, instanceType, respCode), "INFO")
 			if !getHealthStatus(HTTPHEALTH, address) {
 				setHealthStatus(HTTPHEALTH, address, true)
-				sendNotification("HTTP Monitor", "Connection Established", address, service, networkZone, instanceType, 0xFF0000, 0)
+				sendNotification("HTTP Monitor", "Connection Established", address, service, networkZone, instanceType, 0x00FF00, 0)
 			}
 		}
 		time.Sleep(time.Duration(timeout) * time.Second)
