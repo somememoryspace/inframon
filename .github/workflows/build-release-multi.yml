@@ -1,4 +1,4 @@
-name: Main Branch Build Multi-Arch
+name: Main Branch Release
 
 on:
   pull_request:
@@ -39,17 +39,7 @@ jobs:
     needs: check-pr-branch
     if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      dev-artifacts-found: ${{ steps.check-dev-artifacts.outputs.dev-artifacts-found }}
     steps:
-      - name: Debug output
-        run: |
-          echo "is-valid-branch: ${{ needs.check-pr-branch.outputs.is-valid-branch }}"
-          echo "dev-artifacts-found: ${{ steps.check-dev-artifacts.outputs.dev-artifacts-found }}"
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Get latest successful dev workflow run
         id: get-dev-run
         run: |
@@ -61,333 +51,48 @@ jobs:
       - name: Download dev artifacts
         run: |
           if [ -n "${{ steps.get-dev-run.outputs.dev-run-id }}" ]; then
-            mkdir -p dev-artifacts
-            gh run download ${{ steps.get-dev-run.outputs.dev-run-id }} --dir dev-artifacts
+            gh run download ${{ steps.get-dev-run.outputs.dev-run-id }} --dir artifacts
             echo "Dev artifacts downloaded successfully"
           else
-            echo "No successful dev workflow run found. Skipping artifact download."
-            mkdir -p dev-artifacts
-            echo "This is a placeholder file" > dev-artifacts/placeholder.txt
+            echo "No successful dev workflow run found. Aborting."
+            exit 1
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if dev artifacts exist
-        id: check-dev-artifacts
-        run: |
-          if [ -f "dev-artifacts/inframon-linux-amd64/inframon-linux-amd64" ] && \
-             [ -f "dev-artifacts/inframon-linux-arm64/inframon-linux-arm64" ] && \
-             [ -f "dev-artifacts/inframon-darwin-arm64/inframon-darwin-arm64" ]; then
-            echo "dev-artifacts-found=true" >> $GITHUB_OUTPUT
-          else
-            echo "dev-artifacts-found=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Upload dev artifacts for main workflow
+      - name: Upload artifacts for release
         uses: actions/upload-artifact@v4
         with:
-          name: dev-artifacts
-          path: dev-artifacts
-
-  gitleaks-scan:
-    needs: check-pr-branch
-    if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-go-binary:
-    needs: [check-pr-branch, fetch-dev-artifacts, gitleaks-scan]
-    if: needs.check-pr-branch.outputs.is-valid-branch == 'true' && needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'false'
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        arch: [amd64, arm64]
-        include:
-          - os: ubuntu-latest
-            goos: linux
-          - os: macos-latest
-            goos: darwin
-        exclude:
-          - os: macos-latest
-            arch: amd64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.22.5
-
-      - name: Build Go binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.arch }}
-        run: |
-          go build -o inframon-${{ matrix.goos }}-${{ matrix.arch }} ./src
-
-      - name: Generate SHA256 checksum
-        run: |
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            sha256sum inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
-          elif [ "${{ runner.os }}" == "macOS" ]; then
-            shasum -a 256 inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
-          else
-            echo "Unsupported OS for SHA256 generation"
-            exit 1
-          fi
-          echo "SHA256 checksum for inframon-${{ matrix.goos }}-${{ matrix.arch }}:"
-          cat inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
-
-      - name: Upload binary and checksum as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: inframon-${{ matrix.goos }}-${{ matrix.arch }}
-          path: |
-            inframon-${{ matrix.goos }}-${{ matrix.arch }}
-            inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
-
-  validate-checksum:
-    needs: [check-pr-branch, fetch-dev-artifacts, build-go-binary]
-    if: needs.check-pr-branch.outputs.is-valid-branch == 'true' && needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'false'
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        arch: [amd64, arm64]
-        include:
-          - os: ubuntu-latest
-            goos: linux
-          - os: macos-latest
-            goos: darwin
-        exclude:
-          - os: macos-latest
-            arch: amd64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Download binary and checksum
-        uses: actions/download-artifact@v4
-        with:
-          name: inframon-${{ matrix.goos }}-${{ matrix.arch }}
-
-      - name: Validate checksum
-        run: |
-          echo "Validating checksum for inframon-${{ matrix.goos }}-${{ matrix.arch }}"
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            sha256sum -c inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
-          elif [ "${{ runner.os }}" == "macOS" ]; then
-            shasum -a 256 -c inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
-          else
-            echo "Unsupported OS for SHA256 validation"
-            exit 1
-          fi
-
-  package-docker-image:
-    needs: [check-pr-branch, fetch-dev-artifacts, validate-checksum]
-    if: needs.check-pr-branch.outputs.is-valid-branch == 'true' && needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'false'
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Download binary
-        uses: actions/download-artifact@v4
-        with:
-          name: inframon-linux-${{ matrix.arch }}
-
-      - name: Build Docker image
-        run: |
-          docker buildx build --platform linux/${{ matrix.arch }} \
-            -t inframon:latest-${{ matrix.arch }} \
-            --build-arg BINARY=inframon-linux-${{ matrix.arch }} \
-            --load .
-
-      - name: Save Docker image
-        run: |
-          docker save inframon:latest-${{ matrix.arch }} > inframon-latest-${{ matrix.arch }}.tar
-
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image-${{ matrix.arch }}
-          path: inframon-latest-${{ matrix.arch }}.tar
-
-  security-scan:
-    needs: [check-pr-branch, fetch-dev-artifacts, package-docker-image]
-    if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image-${{ matrix.arch }}
-
-      - name: Load Docker image
-        run: |
-          docker load < inframon-latest-${{ matrix.arch }}.tar
-
-      - name: Install Trivy
-        run: |
-          sudo apt-get install wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install trivy
-
-      - name: Run Trivy vulnerability scanner
-        run: |
-          mkdir -p scan_results
-          trivy image --exit-code 1 --severity HIGH,CRITICAL --format table \
-            --output scan_results/trivy-results-${{ matrix.arch }}.txt \
-            inframon:latest-${{ matrix.arch }}
-
-      - name: Generate SBOM
-        run: |
-          mkdir -p sbom_reports
-          trivy image --format json \
-            --output sbom_reports/sbom-${{ matrix.arch }}.json \
-            inframon:latest-${{ matrix.arch }}
-
-      - name: Upload scan results and SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-scan-results-${{ matrix.arch }}
-          path: |
-            scan_results/trivy-results-${{ matrix.arch }}.txt
-            sbom_reports/sbom-${{ matrix.arch }}.json
-
-  push-and-create-manifest:
-    needs: [check-pr-branch, fetch-dev-artifacts, security-scan]
-    if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug output
-        run: |
-          echo "is-valid-branch: ${{ needs.check-pr-branch.outputs.is-valid-branch }}"
-          echo "dev-artifacts-found: ${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}"
-          echo "version: ${{ needs.check-pr-branch.outputs.version }}"
-
-      - name: Set lowercase repository name
-        run: |
-          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "Repository name: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: all-artifacts
-
-      - name: List artifacts
-        run: |
-          echo "Contents of all-artifacts directory:"
-          ls -R all-artifacts
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GH_CR }}
-
-      - name: Load, tag, and push Docker images
-        run: |
-          for arch in amd64 arm64; do
-            echo "Processing architecture: $arch"
-            if [ "${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}" == "true" ]; then
-              if [ -f "all-artifacts/dev-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar" ]; then
-                echo "Loading dev artifact Docker image for ${arch}"
-                docker load < all-artifacts/dev-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar
-                docker tag inframon:dev-${arch} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
-              else
-                echo "Dev artifact Docker image not found for ${arch}. Falling back to latest build."
-                docker load < all-artifacts/docker-image-${arch}/inframon-latest-${arch}.tar
-                docker tag inframon:latest-${arch} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
-              fi
-            else
-              echo "Loading latest build Docker image for ${arch}"
-              docker load < all-artifacts/docker-image-${arch}/inframon-latest-${arch}.tar
-              docker tag inframon:latest-${arch} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
-            fi
-            echo "Pushing image for ${arch}"
-            docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
-          done
-
-      - name: Create and push multi-arch manifest
-        run: |
-          echo "Creating multi-arch manifest"
-          docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }} \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-amd64 \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-arm64
-
-          echo "Pushing multi-arch manifest"
-          docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}
+          name: release-artifacts
+          path: artifacts
 
   create-release:
-    needs: [check-pr-branch, push-and-create-manifest]
+    needs: [check-pr-branch, fetch-dev-artifacts]
     if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
     steps:
-      - name: Debug output
-        run: |
-          echo "is-valid-branch: ${{ needs.check-pr-branch.outputs.is-valid-branch }}"
-          echo "version: ${{ needs.check-pr-branch.outputs.version }}"
-          
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set release version
-        run: |
-          echo "RELEASE_VERSION=${{ needs.check-pr-branch.outputs.version }}" >> $GITHUB_ENV
-
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: all-artifacts
+          name: release-artifacts
+          path: release-artifacts
 
-      - name: Prepare artifact paths
+      - name: Prepare binary paths
         run: |
-          if [ -f "all-artifacts/dev-artifacts/inframon-linux-amd64/inframon-linux-amd64" ]; then
-            echo "LINUX_AMD64_PATH=all-artifacts/dev-artifacts/inframon-linux-amd64/inframon-linux-amd64" >> $GITHUB_ENV
-            echo "LINUX_ARM64_PATH=all-artifacts/dev-artifacts/inframon-linux-arm64/inframon-linux-arm64" >> $GITHUB_ENV
-            echo "DARWIN_ARM64_PATH=all-artifacts/dev-artifacts/inframon-darwin-arm64/inframon-darwin-arm64" >> $GITHUB_ENV
-          else
-            echo "LINUX_AMD64_PATH=all-artifacts/inframon-linux-amd64/inframon-linux-amd64" >> $GITHUB_ENV
-            echo "LINUX_ARM64_PATH=all-artifacts/inframon-linux-arm64/inframon-linux-arm64" >> $GITHUB_ENV
-            echo "DARWIN_ARM64_PATH=all-artifacts/inframon-darwin-arm64/inframon-darwin-arm64" >> $GITHUB_ENV
-          fi
+          echo "LINUX_AMD64_PATH=release-artifacts/inframon-linux-amd64/inframon-linux-amd64" >> $GITHUB_ENV
+          echo "LINUX_ARM64_PATH=release-artifacts/inframon-linux-arm64/inframon-linux-arm64" >> $GITHUB_ENV
+          echo "DARWIN_ARM64_PATH=release-artifacts/inframon-darwin-arm64/inframon-darwin-arm64" >> $GITHUB_ENV
 
       - name: Create Release
-        id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.RELEASE_VERSION }}
-          name: Release v${{ env.RELEASE_VERSION }}
+          tag_name: v${{ needs.check-pr-branch.outputs.version }}
+          name: Release v${{ needs.check-pr-branch.outputs.version }}
           body: |
-            Release of version ${{ env.RELEASE_VERSION }}
+            Release of version ${{ needs.check-pr-branch.outputs.version }}
           draft: false
           prerelease: false
           files: |
@@ -399,3 +104,24 @@ jobs:
             ${{ env.DARWIN_ARM64_PATH }}.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_CR }}
+
+      - name: Push Docker images and create manifest
+        run: |
+          # Push Docker images
+          docker load < release-artifacts/docker-image-amd64/inframon-dev-amd64.tar
+          docker load < release-artifacts/docker-image-arm64/inframon-dev-arm64.tar
+          docker push ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-amd64
+          docker push ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-arm64
+
+          # Create and push multi-arch manifest
+          docker manifest create ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }} \
+            ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-amd64 \
+            ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-arm64
+          docker manifest push ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}
