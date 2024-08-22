@@ -53,19 +53,113 @@ jobs:
           name: dev-artifacts
           path: dev-artifacts
 
-  release:
-    needs: [check-branch, fetch-dev-artifacts]
-    if: needs.check-branch.outputs.is-dev-branch == 'true'
+  gitleaks-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Download dev artifacts
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-go-binary:
+    needs: gitleaks-scan
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
+        include:
+          - os: ubuntu-latest
+            goos: linux
+          - os: macos-latest
+            goos: darwin
+        exclude:
+          - os: macos-latest
+            arch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.5
+
+      - name: Build Go binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          go build -o inframon-${{ matrix.goos }}-${{ matrix.arch }} ./src
+
+      - name: Generate SHA256 checksum
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            sha256sum inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            shasum -a 256 inframon-${{ matrix.goos }}-${{ matrix.arch }} > inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+          else
+            echo "Unsupported OS for SHA256 generation"
+            exit 1
+          fi
+          echo "SHA256 checksum for inframon-${{ matrix.goos }}-${{ matrix.arch }}:"
+          cat inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+
+      - name: Upload binary and checksum as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: inframon-${{ matrix.goos }}-${{ matrix.arch }}
+          path: |
+            inframon-${{ matrix.goos }}-${{ matrix.arch }}
+            inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+
+  validate-checksum:
+    needs: build-go-binary
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
+        include:
+          - os: ubuntu-latest
+            goos: linux
+          - os: macos-latest
+            goos: darwin
+        exclude:
+          - os: macos-latest
+            arch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download binary and checksum
         uses: actions/download-artifact@v4
         with:
-          name: dev-artifacts
-          path: dev-artifacts
+          name: inframon-${{ matrix.goos }}-${{ matrix.arch }}
+
+      - name: Validate checksum
+        run: |
+          echo "Validating checksum for inframon-${{ matrix.goos }}-${{ matrix.arch }}"
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            sha256sum -c inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            shasum -a 256 -c inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
+          else
+            echo "Unsupported OS for SHA256 validation"
+            exit 1
+          fi
+
+  package-docker-image:
+    needs: validate-checksum
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -73,6 +167,110 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: inframon-linux-${{ matrix.arch }}
+
+      - name: Build Docker image
+        run: |
+          docker buildx build --platform linux/${{ matrix.arch }} \
+            -t inframon:latest-${{ matrix.arch }} \
+            --build-arg BINARY=inframon-linux-${{ matrix.arch }} \
+            --load .
+
+      - name: Save Docker image
+        run: |
+          docker save inframon:latest-${{ matrix.arch }} > inframon-latest-${{ matrix.arch }}.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ matrix.arch }}
+          path: inframon-latest-${{ matrix.arch }}.tar
+
+  security-scan:
+    needs: package-docker-image
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ matrix.arch }}
+
+      - name: Load Docker image
+        run: |
+          docker load < inframon-latest-${{ matrix.arch }}.tar
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
+
+      - name: Run Trivy vulnerability scanner
+        run: |
+          mkdir -p scan_results
+          trivy image --exit-code 1 --severity HIGH,CRITICAL --format table \
+            --output scan_results/trivy-results-${{ matrix.arch }}.txt \
+            inframon:latest-${{ matrix.arch }}
+
+      - name: Generate SBOM
+        run: |
+          mkdir -p sbom_reports
+          trivy image --format json \
+            --output sbom_reports/sbom-${{ matrix.arch }}.json \
+            inframon:latest-${{ matrix.arch }}
+
+      - name: Upload scan results and SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results-${{ matrix.arch }}
+          path: |
+            scan_results/trivy-results-${{ matrix.arch }}.txt
+            sbom_reports/sbom-${{ matrix.arch }}.json
+
+  push-images:
+    needs: security-scan
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set lowercase repository name
+        run: |
+          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ matrix.arch }}
+
+      - name: Load Docker image
+        run: |
+          docker load < inframon-latest-${{ matrix.arch }}.tar
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_CR }}
+
+      - name: Tag and push Docker image
+        run: |
+          docker tag inframon:latest-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-${{ matrix.arch }}
+          docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-${{ matrix.arch }}
+
+  create-multiarch-manifest:
+    needs: push-images
+    runs-on: ubuntu-latest
+    steps:
       - name: Set lowercase repository name
         run: |
           echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
@@ -84,16 +282,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GH_CR }}
 
-      - name: Build and push production images
-        run: |
-          for arch in amd64 arm64; do
-            docker buildx build --platform linux/$arch \
-              -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-$arch \
-              --build-arg BINARY=dev-artifacts/inframon-linux-$arch \
-              --push .
-          done
-
-      - name: Create and push production multi-arch manifest
+      - name: Create and push multi-arch manifest
         run: |
           docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest \
             ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-amd64 \
@@ -101,15 +290,40 @@ jobs:
 
           docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest
 
+  create-release:
+    needs: create-multiarch-manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate release tag
+        run: |
+          echo "RELEASE_TAG=v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Release ${{ env.RELEASE_TAG }}
           body: |
-            Release of version v${{ github.run_number }}
+            Release of version ${{ env.RELEASE_TAG }}
           draft: false
           prerelease: false
+          files: |
+            inframon-linux-amd64/inframon-linux-amd64
+            inframon-linux-amd64/inframon-linux-amd64.sha256
+            inframon-linux-arm64/inframon-linux-arm64
+            inframon-linux-arm64/inframon-linux-arm64.sha256
+            inframon-darwin-arm64/inframon-darwin-arm64
+            inframon-darwin-arm64/inframon-darwin-arm64.sha256
+            security-scan-results-amd64/trivy-results-amd64.txt
+            security-scan-results-amd64/sbom-amd64.json
+            security-scan-results-arm64/trivy-results-arm64.txt
+            security-scan-results-arm64/sbom-arm64.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
