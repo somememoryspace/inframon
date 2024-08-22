@@ -197,10 +197,6 @@ jobs:
         arch: [amd64, arm64]
     runs-on: ubuntu-latest
     steps:
-      - name: Set lowercase repository name
-        run: |
-          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
       - name: Download Docker image artifact
         uses: actions/download-artifact@v4
         with:
@@ -219,17 +215,13 @@ jobs:
 
       - name: Tag and push Docker image
         run: |
-          docker tag inframon:dev-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
-          docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+          docker tag inframon:dev-${{ matrix.arch }}  ghcr.io/${{ github.repository_owner }}/inframon:dev-${{ matrix.arch }}
+          docker push ghcr.io/${{ github.repository_owner }}/inframon:dev-${{ matrix.arch }}
 
   stage-2e-create-multiarch-manifest:
     needs: [stage-2d-push-images, extract-version]
     runs-on: ubuntu-latest
     steps:
-      - name: Set lowercase repository name
-        run: |
-          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -239,8 +231,8 @@ jobs:
 
       - name: Create and push multi-arch manifest
         run: |
-          docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-amd64 \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-arm64
+          docker manifest create  ghcr.io/${{ github.repository_owner }}/inframon:dev \
+             ghcr.io/${{ github.repository_owner }}/inframon:dev-amd64 \
+             ghcr.io/${{ github.repository_owner }}/inframon:dev-arm64
 
-          docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev
+          docker manifest push ghcr.io/${{ github.repository_owner }}/inframon:dev
