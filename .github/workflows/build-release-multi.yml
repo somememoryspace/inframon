@@ -268,6 +268,59 @@ jobs:
             scan_results/trivy-results-${{ matrix.arch }}.txt
             sbom_reports/sbom-${{ matrix.arch }}.json
 
+  push-images:
+    needs: [check-pr-branch, fetch-dev-artifacts, security-scan]
+    if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set lowercase repository name
+        run: |
+          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Load Docker image
+        run: |
+          if [ "${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}" == "true" ]; then
+            if [ -f "all-artifacts/dev-artifacts/docker-image-${{ matrix.arch }}/inframon-dev-${{ matrix.arch }}.tar" ]; then
+              echo "Loading dev artifact Docker image"
+              docker load < all-artifacts/dev-artifacts/docker-image-${{ matrix.arch }}/inframon-dev-${{ matrix.arch }}.tar
+            else
+              echo "Dev artifact Docker image not found. Falling back to latest build."
+              docker load < all-artifacts/docker-image-${{ matrix.arch }}/inframon-latest-${{ matrix.arch }}.tar
+            fi
+          else
+            echo "Loading latest build Docker image"
+            docker load < all-artifacts/docker-image-${{ matrix.arch }}/inframon-latest-${{ matrix.arch }}.tar
+          fi
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_CR }}
+
+      - name: Tag and push Docker image
+        run: |
+          if [ "${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}" == "true" ] && docker image inspect inframon:dev-${{ matrix.arch }} >/dev/null 2>&1; then
+            echo "Tagging and pushing dev artifact image"
+            docker tag inframon:dev-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${{ matrix.arch }}
+          elif docker image inspect inframon:latest-${{ matrix.arch }} >/dev/null 2>&1; then
+            echo "Tagging and pushing latest build image"
+            docker tag inframon:latest-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${{ matrix.arch }}
+          else
+            echo "Error: No valid Docker image found to push"
+            exit 1
+          fi
+          docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${{ matrix.arch }}
+
   create-multiarch-manifest:
       needs: [check-pr-branch, push-images]
       if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
