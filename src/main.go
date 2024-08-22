@@ -45,6 +45,13 @@ func init() {
 	if err != nil || LOGGER == nil {
 		log.Fatalf("could not setup logger: %v", err)
 	}
+	if !CONFIG.Configuration.Stdout {
+		defer func() {
+			if err := LOGGER.Close(); err != nil {
+				fmt.Printf("Error closing log file: %v\n", err)
+			}
+		}()
+	}
 
 	if !CONFIG.Configuration.HealthCronDisable {
 		CRONSCHEDULE, err = utils.InitCronSchedule(CONFIG)
