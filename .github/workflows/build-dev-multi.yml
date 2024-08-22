@@ -95,9 +95,11 @@ jobs:
           args: '-no-fail -fmt sarif -out results.sarif ./src/...'
 
       - name: Upload gosec results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          sarif_file: results.sarif
+          name: gosec-results
+          path: gosec-results.json
 
       - name: Display gosec results
         run: |
@@ -111,7 +113,7 @@ jobs:
           fi
 
   stage-1d-build-go-binary:
-    needs: stage-1b-staticcheck
+    needs: [stage-1b-staticcheck, stage-1c-gosec]
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
