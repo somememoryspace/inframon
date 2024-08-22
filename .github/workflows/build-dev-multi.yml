@@ -88,25 +88,27 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set lowercase repository name
-        run: |
-          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "Repository name set to: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
-
       - name: Download binary
         uses: actions/download-artifact@v4
         with:
           name: inframon-linux-${{ matrix.arch }}
 
-      - name: Build and push Docker image
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_CR }}
+      - name: Build Docker image
         run: |
-          echo $GITHUB_TOKEN | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           docker buildx build --platform linux/${{ matrix.arch }} \
-            -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }} \
+            -t inframon:dev-${{ matrix.arch }} \
             --build-arg BINARY=inframon-linux-${{ matrix.arch }} \
-            --push .
+            --load .
+
+      - name: Save Docker image
+        run: |
+          docker save inframon:dev-${{ matrix.arch }} > inframon-dev-${{ matrix.arch }}.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ matrix.arch }}
+          path: inframon-dev-${{ matrix.arch }}.tar
 
   stage-2c-security-scan:
     needs: stage-2b-package-docker-image
@@ -115,9 +117,18 @@ jobs:
         arch: [amd64, arm64]
     runs-on: ubuntu-latest
     steps:
-      - name: Set lowercase repository name
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ matrix.arch }}
+
+      - name: Load Docker image
         run: |
-          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          docker load < inframon-dev-${{ matrix.arch }}.tar
+
+      - name: Verify image exists
+        run: |
+          docker image ls
 
       - name: Install Trivy
         run: |
@@ -132,7 +143,7 @@ jobs:
           mkdir -p scan_results
           trivy image --exit-code 0 --severity HIGH,CRITICAL --format table \
             --output scan_results/trivy-results-${{ matrix.arch }}.txt \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+            inframon:dev-${{ matrix.arch }}
           echo "Vulnerabilities found for ${{ matrix.arch }}:"
           cat scan_results/trivy-results-${{ matrix.arch }}.txt
 
@@ -141,7 +152,7 @@ jobs:
           mkdir -p sbom_reports
           trivy image --format json \
             --output sbom_reports/sbom-${{ matrix.arch }}.json \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+            inframon:dev-${{ matrix.arch }}
 
       - name: Upload scan results and SBOM
         uses: actions/upload-artifact@v4
