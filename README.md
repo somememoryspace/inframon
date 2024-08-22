@@ -9,7 +9,7 @@ Consider the motto: _If the HealthCheck is Passing, Nothing to Worry About. Carr
 ## Current Development Builds
 [![Build Dev](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml)
 
-## Current Releases v1.0.1
+## Current Releases v1.0.2
 [![Build Release](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml)
 
 
