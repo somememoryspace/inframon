@@ -2,7 +2,7 @@ name: OCI Build, Scan, and Push for Development
 
 on:
   push:
-    branches: [ "dev" ]
+    branches: [ "dev-foo" ]
 
 jobs:
   gitleaks-scan:
