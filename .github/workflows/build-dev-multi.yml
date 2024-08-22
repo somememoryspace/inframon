@@ -89,10 +89,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run gosec
-        uses: securego/gosec@master
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          args: '-no-fail -fmt sarif -out results.sarif ./src/...'
+          go-version: 1.22.5
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec
+        run: |
+          gosec -fmt=json -out=gosec-results.json ./src/... || true
+          echo "Gosec execution completed"
+
+      - name: Display gosec results
+        run: |
+          echo "Gosec results:"
+          if [ -f gosec-results.json ]; then
+            cat gosec-results.json
+            if jq -e '.Issues | length > 0' gosec-results.json > /dev/null; then
+              echo "Gosec found security issues. Please review the results."
+              exit 1
+            else
+              echo "No security issues found by gosec."
+            fi
+          else
+            echo "gosec-results.json file not found. Gosec may have failed to run properly."
+            exit 1
+          fi
+
+      - name: List directory contents
+        run: ls -la
 
       - name: Upload gosec results
         uses: actions/upload-artifact@v4
@@ -100,17 +127,6 @@ jobs:
         with:
           name: gosec-results
           path: gosec-results.json
-
-      - name: Display gosec results
-        run: |
-          echo "Gosec results:"
-          cat results.sarif
-          if grep -q '"level":"error"' results.sarif; then
-            echo "Gosec found security issues. Please review the results."
-            exit 1
-          else
-            echo "No security issues found by gosec."
-          fi
 
   stage-1d-build-go-binary:
     needs: [stage-1b-staticcheck, stage-1c-gosec]
