@@ -3,7 +3,7 @@
 ## Current Development Builds
 [![Build Dev](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml)
 
-## Current Releases v1.0.0
+## Current Releases v1.0.1
 [![Build Release](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml)
 
 ## Ready to Use Features
@@ -22,7 +22,31 @@
 - **Refinements**: Ongoing changes to output format for Discord Webhook and SMTP Notifications.
 - **Secrets Management**: Migrate credentials in config file to a secure secrets management solution.
 
----
+## Security Posture
+Inframon considers security in the implementation model and has certain capabilities in place:
+- Stateless-Type Architecture:
+  - No Database to Configure, Manage, Migrate, Maintain
+  - No File Store for Application State
+  - Single Configuration File -> Initialized on Runtime -> Instance Runs
+- Routine Code and Security Scanning using GoSec, StaticCheck, Gitleaks, and Trivy.
+- Root or Rootless Operation Mode
+- Toggle Mode for TLS Verification (Common For This Type of Tool)
+- Contaier Images use an Alpine slim base image with minimal added package dependencies.
+- Container Images are built to run with a non-root user within the image.
+
+### Disclosure Request
+For any security issues found, please open a Github Issue for review and provide detailed observations. 
+
+### GoSec Security Results
+| GoSec Issue ID | Severity | Response Statement |
+|----------|----------|---------------------|
+| G402 | HIGH | TLS verification skip is configurable and used only when necessary for internal services that do not used an appropriate TLS certificate. |
+| G304 | MEDIUM | File paths are from trusted config and command line arguments when the service is started, not with regular user input. |
+
+### Trivy Container Security Results
+| Trivy Issue ID | Severity | Response Statement |
+|----------|----------|---------------------|
+| N/A | N/A | No Security Issues Found. |
 
 ## Define Configuration File
 Define a configuration file to load in ICMP or HTTP based monitors. Additionally, define instance specific configuration. 
