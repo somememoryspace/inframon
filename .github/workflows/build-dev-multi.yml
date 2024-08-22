@@ -2,10 +2,22 @@ name: Dev Branch Build Multi-Arch
 
 on:
   push:
-    branches: [ "dev" ]
+    branches:
+      - 'dev-*.*.*'
 
 jobs:
-  # Secrets Scan Before Build
+  extract-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - name: Extract version from branch name
+        id: get-version
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          VERSION=${BRANCH_NAME#dev-}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
   stage-1a-secrets-scan:
     runs-on: ubuntu-latest
     steps:
@@ -19,7 +31,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Build If Scan Passes
   stage-1b-build-go-binary:
     needs: stage-1a-secrets-scan
     strategy:
@@ -64,7 +75,6 @@ jobs:
             inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}
             inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}.sha256
 
-  # Validate Checksums Before Proceeding
   stage-2a-validate-checksum:
     needs: stage-1b-build-go-binary
     strategy:
@@ -90,7 +100,6 @@ jobs:
             shasum -a 256 -c inframon-darwin-${{ matrix.arch }}.sha256
           fi
 
-  # Package Docker Image
   stage-2b-package-docker-image:
     needs: stage-2a-validate-checksum
     strategy:
@@ -129,7 +138,6 @@ jobs:
           name: docker-image-${{ matrix.arch }}
           path: inframon-dev-${{ matrix.arch }}.tar
 
-  # Trivy Scan on Docker Image
   stage-2c-security-scan:
     needs: stage-2b-package-docker-image
     strategy:
@@ -182,9 +190,8 @@ jobs:
             scan_results/trivy-results-${{ matrix.arch }}.txt
             sbom_reports/sbom-${{ matrix.arch }}.json
 
-  # Push Docker Image
   stage-2d-push-images:
-    needs: stage-2c-security-scan
+    needs: [stage-2c-security-scan, extract-version]
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -212,12 +219,11 @@ jobs:
 
       - name: Tag and push Docker image
         run: |
-          docker tag inframon:dev-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
-          docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+          docker tag inframon:dev-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.extract-version.outputs.version }}-${{ matrix.arch }}
+          docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.extract-version.outputs.version }}-${{ matrix.arch }}
 
-  # Multi-Arch Manifest Creation
   stage-2e-create-multiarch-manifest:
-    needs: stage-2d-push-images
+    needs: [stage-2d-push-images, extract-version]
     runs-on: ubuntu-latest
     steps:
       - name: Set lowercase repository name
@@ -233,8 +239,8 @@ jobs:
 
       - name: Create and push multi-arch manifest
         run: |
-          docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-amd64 \
-            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-arm64
+          docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.extract-version.outputs.version }} \
+            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.extract-version.outputs.version }}-amd64 \
+            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.extract-version.outputs.version }}-arm64
 
-          docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev
+          docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.extract-version.outputs.version }}
