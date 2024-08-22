@@ -128,9 +128,9 @@ jobs:
               echo "Loading image for $arch"
               docker load < release-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar
               echo "Tagging image for $arch"
-              docker tag inframon:dev-${arch} ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
+              docker tag inframon:dev-${arch} ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
               echo "Pushing image for $arch"
-              docker push ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
+              docker push ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
             else
               echo "Docker image tar file not found for $arch"
               ls -l release-artifacts/docker-image-${arch}
@@ -143,9 +143,9 @@ jobs:
 
           # Create and push multi-arch manifest
           echo "Creating multi-arch manifest"
-          docker manifest create ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }} \
-            ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-amd64 \
-            ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}-arm64
+          docker manifest create ghcr.io/${{ github.repository_owner }}/inframon:latest \
+            ghcr.io/${{ github.repository_owner }}/inframon:latest-amd64 \
+            ghcr.io/${{ github.repository_owner }}/inframon:latest-arm64
 
           echo "Pushing multi-arch manifest"
-          docker manifest push ghcr.io/${{ github.repository_owner }}/inframon:${{ needs.check-pr-branch.outputs.version }}
+          docker manifest push ghcr.io/${{ github.repository_owner }}/inframon:latest
