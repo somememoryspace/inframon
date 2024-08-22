@@ -44,18 +44,36 @@ jobs:
           go-version: 1.22.5
 
       - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          echo "Staticcheck version:"
+          staticcheck --version
+
+      - name: List Go files
+        run: |
+          echo "Go files in the ./src directory:"
+          find ./src -name "*.go"
 
       - name: Run staticcheck
         run: |
-          staticcheck ./... > staticcheck_results.txt || true
+          echo "Running staticcheck on ./src..."
+          staticcheck -f text ./src/... > staticcheck_results.txt 2>&1 || true
+          echo "Staticcheck complete. Results:"
           cat staticcheck_results.txt
           if [ -s staticcheck_results.txt ]; then
             echo "Staticcheck found issues. Please review the output above."
             exit 1
           else
-            echo "Staticcheck passed with no issues."
+            echo "No issues found by staticcheck."
           fi
+
+      - name: Check Go environment
+        if: ${{ failure() }}
+        run: |
+          echo "Go version:"
+          go version
+          echo "Go environment:"
+          go env
 
       - name: Upload staticcheck results
         uses: actions/upload-artifact@v4
