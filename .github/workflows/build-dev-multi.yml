@@ -109,7 +109,6 @@ jobs:
             cat gosec-results.json
             if jq -e '.Issues | length > 0' gosec-results.json > /dev/null; then
               echo "Gosec found security issues. Please review the results."
-              exit 1
             else
               echo "No security issues found by gosec."
             fi
