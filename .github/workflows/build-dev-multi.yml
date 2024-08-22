@@ -47,7 +47,22 @@ jobs:
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Run staticcheck
-        run: staticcheck ./...
+        run: |
+          staticcheck ./... > staticcheck_results.txt || true
+          cat staticcheck_results.txt
+          if [ -s staticcheck_results.txt ]; then
+            echo "Staticcheck found issues. Please review the output above."
+            exit 1
+          else
+            echo "Staticcheck passed with no issues."
+          fi
+
+      - name: Upload staticcheck results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staticcheck-results
+          path: staticcheck_results.txt
 
   stage-1c-build-go-binary:
     needs: stage-1b-staticcheck
