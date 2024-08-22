@@ -94,7 +94,7 @@ jobs:
             inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}.sha256
 
   stage-2a-validate-checksum:
-    needs: stage-1b-build-go-binary
+    needs: stage-1c-build-go-binary
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
