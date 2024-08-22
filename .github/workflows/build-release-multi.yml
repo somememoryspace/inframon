@@ -319,7 +319,7 @@ jobs:
           docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}
 
   create-release:
-    needs: [check-pr-branch, create-multiarch-manifest]
+    needs: [check-pr-branch, push-and-create-manifest]
     if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
     runs-on: ubuntu-latest
     permissions:
