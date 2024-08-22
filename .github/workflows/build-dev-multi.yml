@@ -82,7 +82,35 @@ jobs:
           name: staticcheck-results
           path: staticcheck_results.txt
 
-  stage-1c-build-go-binary:
+  stage-1c-gosec:
+    needs: stage-1b-staticcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run gosec
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out results.sarif ./src/...'
+
+      - name: Upload gosec results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+      - name: Display gosec results
+        run: |
+          echo "Gosec results:"
+          cat results.sarif
+          if grep -q '"level":"error"' results.sarif; then
+            echo "Gosec found security issues. Please review the results."
+            exit 1
+          else
+            echo "No security issues found by gosec."
+          fi
+
+  stage-1d-build-go-binary:
     needs: stage-1b-staticcheck
     strategy:
       matrix:
@@ -127,7 +155,7 @@ jobs:
             inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}.sha256
 
   stage-2a-validate-checksum:
-    needs: stage-1c-build-go-binary
+    needs: stage-1d-build-go-binary
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
