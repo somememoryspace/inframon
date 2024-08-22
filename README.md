@@ -1,7 +1,10 @@
 # Inframon: Stupid Easy Infrastructure Monitoring
 
-## Current Releases
+## Current Development Builds
 [![Build Dev](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml)
+
+## Current Releases v1.0.0
+[![Build Release](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml)
 
 ## Ready to Use Features
 - **ICMP Monitoring**: Ping servers and network devices to check their availability.
@@ -71,7 +74,7 @@ You can pull the pre-built container image from the GitHub Container Registry:
 
 #### Latest Image
 ```bash
-$ docker pull ghcr.io/somememoryspace/inframon/inframon:latest
+$ docker pull ghcr.io/somememoryspace/inframon:latest
 ```
 
 #### Development Image
@@ -92,7 +95,7 @@ version: '3.8'
 services:
   inframon:
     container_name: inframon
-    image: ghcr.io/somememoryspace/inframon/inframon:latest
+    image: ghcr.io/somememoryspace/inframon:latest
     environment:
       - CONFIG_PATH=/config/config.yaml
     volumes:
@@ -188,7 +191,7 @@ spec:
     spec:
       containers:
       - name: inframon
-        image: ghcr.io/somememoryspace/inframon/inframon:latest
+        image: ghcr.io/somememoryspace/inframon:latest
         imagePullPolicy: Always
         args: ["--config", "/config/config.yaml"]
         volumeMounts:
