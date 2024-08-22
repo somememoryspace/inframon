@@ -117,6 +117,9 @@ jobs:
 
       - name: Push Docker images and create manifest
         run: |
+          echo "Listing contents of release-artifacts directory:"
+          ls -R release-artifacts
+
           # List available Docker images
           echo "Available Docker images before loading:"
           docker images
@@ -124,16 +127,18 @@ jobs:
           # Load and push Docker images
           for arch in amd64 arm64; do
             echo "Processing $arch architecture"
-            if [ -f "release-artifacts/docker-image-${arch}/inframon-${arch}.tar" ]; then
+            if [ -f "release-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar" ]; then
               echo "Loading image for $arch"
-              docker load < release-artifacts/docker-image-${arch}/inframon-${arch}.tar
+              docker load < release-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar
               echo "Tagging image for $arch"
-              docker tag inframon:${arch} ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
+              docker tag inframon:dev-${arch} ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
               echo "Pushing image for $arch"
               docker push ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
             else
               echo "Docker image tar file not found for $arch"
+              echo "Contents of docker-image-${arch} directory:"
               ls -l release-artifacts/docker-image-${arch}
+              exit 1
             fi
           done
 
@@ -141,11 +146,26 @@ jobs:
           echo "Docker images after tagging:"
           docker images
 
+          # Verify pushed images
+          for arch in amd64 arm64; do
+            echo "Verifying pushed image for $arch"
+            docker pull ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
+            if [ $? -ne 0 ]; then
+              echo "Failed to pull image for $arch. Image may not have been pushed successfully."
+              exit 1
+            fi
+          done
+
           # Create and push multi-arch manifest
           echo "Creating multi-arch manifest"
           docker manifest create ghcr.io/${{ github.repository_owner }}/inframon:latest \
             ghcr.io/${{ github.repository_owner }}/inframon:latest-amd64 \
             ghcr.io/${{ github.repository_owner }}/inframon:latest-arm64
 
+          echo "Inspecting manifest"
+          docker manifest inspect ghcr.io/${{ github.repository_owner }}/inframon:latest
+
           echo "Pushing multi-arch manifest"
           docker manifest push ghcr.io/${{ github.repository_owner }}/inframon:latest
+        env:
+          DOCKER_CLI_EXPERIMENTAL: enabled
