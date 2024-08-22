@@ -17,10 +17,13 @@ jobs:
         id: check-branch
         run: |
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          echo "Branch name: $BRANCH_NAME"
           if [[ $BRANCH_NAME =~ ^dev-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "is-valid-branch=true" >> $GITHUB_OUTPUT
+            echo "Valid branch detected"
           else
             echo "is-valid-branch=false" >> $GITHUB_OUTPUT
+            echo "Invalid branch detected"
           fi
 
       - name: Extract version from branch name
@@ -30,6 +33,7 @@ jobs:
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           VERSION=${BRANCH_NAME#dev-}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
 
   fetch-dev-artifacts:
     needs: check-pr-branch
@@ -38,6 +42,11 @@ jobs:
     outputs:
       dev-artifacts-found: ${{ steps.check-dev-artifacts.outputs.dev-artifacts-found }}
     steps:
+      - name: Debug output
+        run: |
+          echo "is-valid-branch: ${{ needs.check-pr-branch.outputs.is-valid-branch }}"
+          echo "dev-artifacts-found: ${{ steps.check-dev-artifacts.outputs.dev-artifacts-found }}"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -273,14 +282,26 @@ jobs:
     if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Debug output
+        run: |
+          echo "is-valid-branch: ${{ needs.check-pr-branch.outputs.is-valid-branch }}"
+          echo "dev-artifacts-found: ${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}"
+          echo "version: ${{ needs.check-pr-branch.outputs.version }}"
+
       - name: Set lowercase repository name
         run: |
           echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "Repository name: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: all-artifacts
+
+      - name: List artifacts
+        run: |
+          echo "Contents of all-artifacts directory:"
+          ls -R all-artifacts
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -292,6 +313,7 @@ jobs:
       - name: Load, tag, and push Docker images
         run: |
           for arch in amd64 arm64; do
+            echo "Processing architecture: $arch"
             if [ "${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}" == "true" ]; then
               if [ -f "all-artifacts/dev-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar" ]; then
                 echo "Loading dev artifact Docker image for ${arch}"
@@ -307,15 +329,18 @@ jobs:
               docker load < all-artifacts/docker-image-${arch}/inframon-latest-${arch}.tar
               docker tag inframon:latest-${arch} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
             fi
+            echo "Pushing image for ${arch}"
             docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-${arch}
           done
 
       - name: Create and push multi-arch manifest
         run: |
+          echo "Creating multi-arch manifest"
           docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }} \
             ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-amd64 \
             ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}-arm64
 
+          echo "Pushing multi-arch manifest"
           docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:${{ needs.check-pr-branch.outputs.version }}
 
   create-release:
@@ -326,6 +351,11 @@ jobs:
       contents: write
       packages: write
     steps:
+      - name: Debug output
+        run: |
+          echo "is-valid-branch: ${{ needs.check-pr-branch.outputs.is-valid-branch }}"
+          echo "version: ${{ needs.check-pr-branch.outputs.version }}"
+          
       - name: Checkout code
         uses: actions/checkout@v4
 
