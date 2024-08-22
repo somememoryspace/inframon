@@ -31,8 +31,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  stage-1b-build-go-binary:
+  stage-1b-staticcheck:
     needs: stage-1a-secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.5
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        run: staticcheck ./...
+
+  stage-1c-build-go-binary:
+    needs: stage-1b-staticcheck
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
