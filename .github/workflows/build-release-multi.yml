@@ -124,11 +124,11 @@ jobs:
           # Load and push Docker images
           for arch in amd64 arm64; do
             echo "Processing $arch architecture"
-            if [ -f "release-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar" ]; then
+            if [ -f "release-artifacts/docker-image-${arch}/inframon-${arch}.tar" ]; then
               echo "Loading image for $arch"
-              docker load < release-artifacts/docker-image-${arch}/inframon-dev-${arch}.tar
+              docker load < release-artifacts/docker-image-${arch}/inframon-${arch}.tar
               echo "Tagging image for $arch"
-              docker tag inframon:dev-${arch} ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
+              docker tag inframon:${arch} ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
               echo "Pushing image for $arch"
               docker push ghcr.io/${{ github.repository_owner }}/inframon:latest-${arch}
             else
