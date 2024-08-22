@@ -22,7 +22,7 @@ configuration:
     healthCheckTimeout: 5
     discordWebhookDisable: false
     healthCron: "0 */12 * * *"
-    healthCronWDisable: true    
+    healthCronDisable: true    
     healthCronWebhookDisable: false
     healthCronSmtpDisable: false
     discordWebhookUrl: "https://discord.com/api/webhooks/***********************************"
