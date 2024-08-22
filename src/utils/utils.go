@@ -223,7 +223,7 @@ func CreateLogEntry(Type string, Message string, Event string) (string, error) {
 }
 
 func ValidateLogDirectory(directoryPath string) error {
-	err := os.MkdirAll(directoryPath, os.ModePerm)
+	err := os.MkdirAll(directoryPath, 0750)
 	if err != nil {
 		return fmt.Errorf("unable to create directory: %s", directoryPath)
 	}
