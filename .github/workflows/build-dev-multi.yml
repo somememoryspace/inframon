@@ -31,8 +31,104 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  stage-1b-build-go-binary:
+  stage-1b-staticcheck:
     needs: stage-1a-secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.5
+
+      - name: Install staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          echo "Staticcheck version:"
+          staticcheck --version
+
+      - name: List Go files
+        run: |
+          echo "Go files in the ./src directory:"
+          find ./src -name "*.go"
+
+      - name: Run staticcheck
+        run: |
+          echo "Running staticcheck on ./src..."
+          staticcheck -f text ./src/... > staticcheck_results.txt 2>&1 || true
+          echo "Staticcheck complete. Results:"
+          cat staticcheck_results.txt
+          if [ -s staticcheck_results.txt ]; then
+            echo "Staticcheck found issues. Please review the output above."
+            exit 1
+          else
+            echo "No issues found by staticcheck."
+          fi
+
+      - name: Check Go environment
+        if: ${{ failure() }}
+        run: |
+          echo "Go version:"
+          go version
+          echo "Go environment:"
+          go env
+
+      - name: Upload staticcheck results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staticcheck-results
+          path: staticcheck_results.txt
+
+  stage-1c-gosec:
+    needs: stage-1b-staticcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.5
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec
+        run: |
+          gosec -fmt=json -out=gosec-results.json ./src/... || true
+          echo "Gosec execution completed"
+
+      - name: Display gosec results
+        run: |
+          echo "Gosec results:"
+          if [ -f gosec-results.json ]; then
+            cat gosec-results.json
+            if jq -e '.Issues | length > 0' gosec-results.json > /dev/null; then
+              echo "Gosec found security issues. Please review the results."
+            else
+              echo "No security issues found by gosec."
+            fi
+          else
+            echo "gosec-results.json file not found. Gosec may have failed to run properly."
+            exit 1
+          fi
+
+      - name: List directory contents
+        run: ls -la
+
+      - name: Upload gosec results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gosec-results
+          path: gosec-results.json
+
+  stage-1d-build-go-binary:
+    needs: [stage-1b-staticcheck, stage-1c-gosec]
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -76,7 +172,7 @@ jobs:
             inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}.sha256
 
   stage-2a-validate-checksum:
-    needs: stage-1b-build-go-binary
+    needs: stage-1d-build-go-binary
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]

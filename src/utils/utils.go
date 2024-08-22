@@ -203,7 +203,9 @@ func (sl *SafeLogger) Rotate(newFilePath string) error {
 	sl.logger.SetOutput(newFile)
 
 	if sl.file != nil {
-		sl.file.Close()
+		if err := sl.file.Close(); err != nil {
+			return fmt.Errorf("failed to close current log file: %v", err)
+		}
 	}
 	sl.file = newFile
 	return nil
@@ -223,7 +225,7 @@ func CreateLogEntry(Type string, Message string, Event string) (string, error) {
 }
 
 func ValidateLogDirectory(directoryPath string) error {
-	err := os.MkdirAll(directoryPath, os.ModePerm)
+	err := os.MkdirAll(directoryPath, 0750)
 	if err != nil {
 		return fmt.Errorf("unable to create directory: %s", directoryPath)
 	}
@@ -237,6 +239,7 @@ func SetupLogger(stdout bool, logPath, logName string) (*SafeLogger, error) {
 
 	if stdout {
 		safeLogger.logger = log.New(os.Stdout, "", loggerFlags)
+		safeLogger.file = nil
 		return safeLogger, nil
 	}
 
@@ -245,21 +248,33 @@ func SetupLogger(stdout bool, logPath, logName string) (*SafeLogger, error) {
 	}
 
 	fullPath := filepath.Join(logPath, logName)
-	file, err := os.OpenFile(fullPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(fullPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %v", err)
 	}
-
-	defer func() {
-		if err != nil {
-			file.Close()
-		}
-	}()
 
 	safeLogger.logger = log.New(file, "", loggerFlags)
 	safeLogger.file = file
 	fmt.Printf("Message: Running with output to logfile: %v\n", fullPath)
 	return safeLogger, nil
+}
+
+func (sl *SafeLogger) Close() error {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+
+	if sl.logger == nil {
+		return nil
+	}
+
+	if file, ok := sl.logger.Writer().(*os.File); ok {
+		err := file.Close()
+		if err != nil {
+			return fmt.Errorf("failed to close log file: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (sl *SafeLogger) RotateLogFile(logPath string, logName string, maxSize int64, maxFiles int) error {
@@ -304,8 +319,15 @@ func (sl *SafeLogger) RotateLogFile(logPath string, logName string, maxSize int6
 		return fmt.Errorf("failed to create new log file: %v", err)
 	}
 	defer func() {
-		if err != nil {
-			newFile.Close()
+		if newFile != nil {
+			closeErr := newFile.Close()
+			if closeErr != nil {
+				if err != nil {
+					err = fmt.Errorf("multiple errors: %v; failed to close new log file: %v", err, closeErr)
+				} else {
+					err = fmt.Errorf("failed to close new log file: %v", closeErr)
+				}
+			}
 		}
 	}()
 
