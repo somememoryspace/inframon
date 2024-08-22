@@ -1,10 +1,22 @@
-# Inframon: Stupid Easy Infrastructure Monitoring
+# Inframon
+Make Infrastructure Monitoring Easy Again. Simple easy monitoring service with no frills. Monitor services and just see exactly what you need to worry about. 
+
+Consider the motto: _If the HealthCheck is Passing, Nothing to Worry About. Carry-On._
+
+- **Platforms**: Kubernetes | LXC | Docker | Podman | Virtual Machine | Bare Metal |
+- **Supported** **Architectures**: Linux ARM64 AMD64 | macOS ARM64
 
 ## Current Development Builds
 [![Build Dev](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml)
 
 ## Current Releases v1.0.1
 [![Build Release](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml)
+
+## How It Works
+- Services are loaded into a configuration file and loaded on Inframon start-up. 
+- Based on the set timeout intervals, the services are checked via the set protocol. 
+- Services reported as disrupted are reported via the notification channels configured. 
+- If enabled, HealthCheck reports provide a scheduled report of continually failing services, or an all OK status. 
 
 ## Ready to Use Features
 - **ICMP Monitoring**: Ping servers and network devices to check their availability.
