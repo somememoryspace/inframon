@@ -9,7 +9,7 @@ Consider the motto: _If the HealthCheck is Passing, Nothing to Worry About. Carr
 ## Current Development Builds
 [![Build Dev](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-dev-multi.yml)
 
-## Current Releases v1.0.1
+## Current Releases v1.0.2
 [![Build Release](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml)
 
 
@@ -99,7 +99,7 @@ configuration:
     healthCheckTimeout: 5
     discordWebhookDisable: false
     healthCron: "0 */12 * * *"
-    healthCronWDisable: true    
+    healthCronDisable: true    
     healthCronWebhookDisable: false
     healthCronSmtpDisable: false
     discordWebhookUrl: "https://discord.com/api/webhooks/***********************************"
@@ -127,7 +127,7 @@ $ docker pull ghcr.io/somememoryspace/inframon:latest
 
 #### Development Image
 ```bash
-$ docker pull ghcr.io/somememoryspace/inframon/inframon:dev
+$ docker pull ghcr.io/somememoryspace/inframon:dev
 ```
 
 ### Create a Docker Directory and an Empty Compose File
