@@ -12,11 +12,6 @@ Consider the motto: _If the HealthCheck is Passing, Nothing to Worry About. Carr
 ## Current Releases v1.0.1
 [![Build Release](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml/badge.svg)](https://github.com/somememoryspace/inframon/actions/workflows/build-release-multi.yml)
 
-## How It Works
-- Services are loaded into a configuration file and loaded on Inframon start-up. 
-- Based on the set timeout intervals, the services are checked via the set protocol. 
-- Services reported as disrupted are reported via the notification channels configured. 
-- If enabled, HealthCheck reports provide a scheduled report of continually failing services, or an all OK status. 
 
 ## Ready to Use Features
 - **ICMP Monitoring**: Ping servers and network devices to check their availability.
@@ -33,6 +28,23 @@ Consider the motto: _If the HealthCheck is Passing, Nothing to Worry About. Carr
 - **Routine Bugfixes**: Corrective bugfixes as they are discovered and reported.
 - **Refinements**: Ongoing changes to output format for Discord Webhook and SMTP Notifications.
 - **Secrets Management**: Migrate credentials in config file to a secure secrets management solution.
+
+## How It Works
+- Services are loaded into a configuration file and loaded on Inframon start-up. 
+- Based on the set timeout intervals, the services are checked via the set protocol. 
+- Services reported as disrupted are reported via the notification channels configured. 
+- If enabled, HealthCheck reports provide a scheduled report of continually failing services, or an all OK status. 
+
+## Notification Examples
+### Discord Webhook
+<p align="left">
+  <img src="assets/discord.png" alt="Discord Webhook Example">
+</p>
+
+### SMTP Email
+<p align="left">
+  <img src="assets/smtp.png" alt="Discord Webhook Example">
+</p>
 
 ## Security Posture
 Inframon considers security in the implementation model and has certain capabilities in place:
