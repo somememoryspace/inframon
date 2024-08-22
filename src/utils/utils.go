@@ -319,8 +319,15 @@ func (sl *SafeLogger) RotateLogFile(logPath string, logName string, maxSize int6
 		return fmt.Errorf("failed to create new log file: %v", err)
 	}
 	defer func() {
-		if err != nil {
-			newFile.Close()
+		if newFile != nil {
+			closeErr := newFile.Close()
+			if closeErr != nil {
+				if err != nil {
+					err = fmt.Errorf("multiple errors: %v; failed to close new log file: %v", err, closeErr)
+				} else {
+					err = fmt.Errorf("failed to close new log file: %v", closeErr)
+				}
+			}
 		}
 	}()
 
