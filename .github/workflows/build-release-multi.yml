@@ -40,10 +40,13 @@ jobs:
     if: needs.check-pr-branch.outputs.is-valid-branch == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Get latest successful dev workflow run
         id: get-dev-run
         run: |
-          DEV_RUN_ID=$(gh run list --workflow=build-dev-multi.yml --branch=${{ github.event.pull_request.head.ref }} --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+          DEV_RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-dev-multi.yml --branch=${{ github.event.pull_request.head.ref }} --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
           echo "dev-run-id=$DEV_RUN_ID" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -51,7 +54,7 @@ jobs:
       - name: Download dev artifacts
         run: |
           if [ -n "${{ steps.get-dev-run.outputs.dev-run-id }}" ]; then
-            gh run download ${{ steps.get-dev-run.outputs.dev-run-id }} --dir artifacts
+            gh run download ${{ steps.get-dev-run.outputs.dev-run-id }} --repo ${{ github.repository }} --dir artifacts
             echo "Dev artifacts downloaded successfully"
           else
             echo "No successful dev workflow run found. Aborting."
