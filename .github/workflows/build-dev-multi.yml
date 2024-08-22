@@ -162,8 +162,40 @@ jobs:
             scan_results/trivy-results-${{ matrix.arch }}.txt
             sbom_reports/sbom-${{ matrix.arch }}.json
 
-  stage-2d-create-multiarch-manifest:
+  stage-2d-push-images:
     needs: stage-2c-security-scan
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set lowercase repository name
+        run: |
+          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ matrix.arch }}
+
+      - name: Load Docker image
+        run: |
+          docker load < inframon-dev-${{ matrix.arch }}.tar
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_CR }}
+
+      - name: Tag and push Docker image
+        run: |
+          docker tag inframon:dev-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+          docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+
+  stage-2e-create-multiarch-manifest:
+    needs: stage-2d-push-images
     runs-on: ubuntu-latest
     steps:
       - name: Set lowercase repository name
