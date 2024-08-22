@@ -7,6 +7,8 @@ on:
 jobs:
   fetch-dev-artifacts:
     runs-on: ubuntu-latest
+    outputs:
+      dev-artifacts-found: ${{ steps.check-dev-artifacts.outputs.dev-artifacts-found }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,6 +35,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if dev artifacts exist
+        id: check-dev-artifacts
+        run: |
+          if [ -f "dev-artifacts/inframon-linux-amd64/inframon-linux-amd64" ] && \
+             [ -f "dev-artifacts/inframon-linux-arm64/inframon-linux-arm64" ] && \
+             [ -f "dev-artifacts/inframon-darwin-arm64/inframon-darwin-arm64" ]; then
+            echo "dev-artifacts-found=true" >> $GITHUB_OUTPUT
+          else
+            echo "dev-artifacts-found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload dev artifacts for main workflow
         uses: actions/upload-artifact@v4
         with:
@@ -53,7 +66,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-go-binary:
-    needs: gitleaks-scan
+    needs: [fetch-dev-artifacts, gitleaks-scan]
+    if: needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'false'
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -105,7 +119,8 @@ jobs:
             inframon-${{ matrix.goos }}-${{ matrix.arch }}.sha256
 
   validate-checksum:
-    needs: build-go-binary
+    needs: [fetch-dev-artifacts, build-go-binary]
+    if: needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'false'
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -138,7 +153,8 @@ jobs:
           fi
 
   package-docker-image:
-    needs: validate-checksum
+    needs: [fetch-dev-artifacts, validate-checksum]
+    if: needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'false'
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -176,7 +192,8 @@ jobs:
           path: inframon-latest-${{ matrix.arch }}.tar
 
   security-scan:
-    needs: package-docker-image
+    needs: [fetch-dev-artifacts, package-docker-image]
+    if: needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'false'
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -222,7 +239,7 @@ jobs:
             sbom_reports/sbom-${{ matrix.arch }}.json
 
   push-images:
-    needs: security-scan
+    needs: [fetch-dev-artifacts, security-scan]
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -232,14 +249,18 @@ jobs:
         run: |
           echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      - name: Download Docker image artifact
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: docker-image-${{ matrix.arch }}
+          name: ${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found == 'true' && 'dev-artifacts' || 'docker-image-${{ matrix.arch }}' }}
 
       - name: Load Docker image
         run: |
-          docker load < inframon-latest-${{ matrix.arch }}.tar
+          if [ "${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}" == "true" ]; then
+            docker load < dev-artifacts/docker-image-${{ matrix.arch }}/inframon-dev-${{ matrix.arch }}.tar
+          else
+            docker load < inframon-latest-${{ matrix.arch }}.tar
+          fi
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -250,7 +271,11 @@ jobs:
 
       - name: Tag and push Docker image
         run: |
-          docker tag inframon:latest-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-${{ matrix.arch }}
+          if [ "${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}" == "true" ]; then
+            docker tag inframon:dev-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-${{ matrix.arch }}
+          else
+            docker tag inframon:latest-${{ matrix.arch }} ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-${{ matrix.arch }}
+          fi
           docker push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest-${{ matrix.arch }}
 
   create-multiarch-manifest:
@@ -277,7 +302,7 @@ jobs:
           docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest
 
   create-release:
-    needs: [create-multiarch-manifest, security-scan]
+    needs: [fetch-dev-artifacts, create-multiarch-manifest, security-scan]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -295,6 +320,18 @@ jobs:
         with:
           path: all-artifacts
 
+      - name: Prepare artifact paths
+        run: |
+          if [ "${{ needs.fetch-dev-artifacts.outputs.dev-artifacts-found }}" == "true" ]; then
+            echo "LINUX_AMD64_PATH=all-artifacts/dev-artifacts/inframon-linux-amd64/inframon-linux-amd64" >> $GITHUB_ENV
+            echo "LINUX_ARM64_PATH=all-artifacts/dev-artifacts/inframon-linux-arm64/inframon-linux-arm64" >> $GITHUB_ENV
+            echo "DARWIN_ARM64_PATH=all-artifacts/dev-artifacts/inframon-darwin-arm64/inframon-darwin-arm64" >> $GITHUB_ENV
+          else
+            echo "LINUX_AMD64_PATH=all-artifacts/inframon-linux-amd64/inframon-linux-amd64" >> $GITHUB_ENV
+            echo "LINUX_ARM64_PATH=all-artifacts/inframon-linux-arm64/inframon-linux-arm64" >> $GITHUB_ENV
+            echo "DARWIN_ARM64_PATH=all-artifacts/inframon-darwin-arm64/inframon-darwin-arm64" >> $GITHUB_ENV
+          fi
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -306,16 +343,12 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            all-artifacts/inframon-linux-amd64/inframon-linux-amd64
-            all-artifacts/inframon-linux-amd64/inframon-linux-amd64.sha256
-            all-artifacts/inframon-linux-arm64/inframon-linux-arm64
-            all-artifacts/inframon-linux-arm64/inframon-linux-arm64.sha256
-            all-artifacts/inframon-darwin-arm64/inframon-darwin-arm64
-            all-artifacts/inframon-darwin-arm64/inframon-darwin-arm64.sha256
-            all-artifacts/security-scan-results-amd64/scan_results/trivy-results-amd64.txt
-            all-artifacts/security-scan-results-amd64/sbom_reports/sbom-amd64.json
-            all-artifacts/security-scan-results-arm64/scan_results/trivy-results-arm64.txt
-            all-artifacts/security-scan-results-arm64/sbom_reports/sbom-arm64.json
+            ${{ env.LINUX_AMD64_PATH }}
+            ${{ env.LINUX_AMD64_PATH }}.sha256
+            ${{ env.LINUX_ARM64_PATH }}
+            ${{ env.LINUX_ARM64_PATH }}.sha256
+            ${{ env.DARWIN_ARM64_PATH }}
+            ${{ env.DARWIN_ARM64_PATH }}.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

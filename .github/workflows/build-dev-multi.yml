@@ -24,8 +24,12 @@ jobs:
     needs: stage-1a-secrets-scan
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         arch: [amd64, arm64]
-    runs-on: ubuntu-latest
+        exclude:
+          - os: macos-latest
+            arch: amd64
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,42 +41,54 @@ jobs:
 
       - name: Build Go binary
         env:
-          GOOS: linux
+          GOOS: ${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}
           GOARCH: ${{ matrix.arch }}
         run: |
-          go build -o inframon-linux-${{ matrix.arch }} ./src
+          go build -o inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }} ./src
 
       - name: Generate SHA256 checksum
         run: |
-          sha256sum inframon-linux-${{ matrix.arch }} > inframon-linux-${{ matrix.arch }}.sha256
-          echo "SHA256 checksum for inframon-linux-${{ matrix.arch }}:"
-          cat inframon-linux-${{ matrix.arch }}.sha256
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            sha256sum inframon-linux-${{ matrix.arch }} > inframon-linux-${{ matrix.arch }}.sha256
+          else
+            shasum -a 256 inframon-darwin-${{ matrix.arch }} > inframon-darwin-${{ matrix.arch }}.sha256
+          fi
+          echo "SHA256 checksum for inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}:"
+          cat inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}.sha256
 
       - name: Upload binary and checksum as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: inframon-linux-${{ matrix.arch }}
+          name: inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}
           path: |
-            inframon-linux-${{ matrix.arch }}
-            inframon-linux-${{ matrix.arch }}.sha256
+            inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}
+            inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}.sha256
 
   # Validate Checksums Before Proceeding
   stage-2a-validate-checksum:
     needs: stage-1b-build-go-binary
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         arch: [amd64, arm64]
-    runs-on: ubuntu-latest
+        exclude:
+          - os: macos-latest
+            arch: amd64
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Download binary and checksum
         uses: actions/download-artifact@v4
         with:
-          name: inframon-linux-${{ matrix.arch }}
+          name: inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}
 
       - name: Validate checksum
         run: |
-          echo "Validating checksum for inframon-linux-${{ matrix.arch }}"
-          sha256sum -c inframon-linux-${{ matrix.arch }}.sha256
+          echo "Validating checksum for inframon-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}-${{ matrix.arch }}"
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            sha256sum -c inframon-linux-${{ matrix.arch }}.sha256
+          else
+            shasum -a 256 -c inframon-darwin-${{ matrix.arch }}.sha256
+          fi
 
   # Package Docker Image
   stage-2b-package-docker-image:
