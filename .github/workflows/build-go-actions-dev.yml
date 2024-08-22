@@ -2,7 +2,7 @@ name: Binary Multi-arch Build for Development
 
 on:
   push:
-    branches: [ "dev" ]
+    branches: [ "dev-foo" ]
 
 jobs:
   gitleaks-scan:

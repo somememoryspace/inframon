@@ -1,0 +1,175 @@
+name: Dev Branch Build Multi-Arch
+
+on:
+  push:
+    branches: [ "dev" ]
+
+jobs:
+  # Secrets Scan Before Build
+  stage-1a-secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  stage-1b-build-go-binary:
+    needs: stage-1a-secrets-scan
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.5
+
+      - name: Build Go binary
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          go build -o inframon-linux-${{ matrix.arch }} ./src
+
+      - name: Generate SHA256 checksum
+        run: |
+          sha256sum inframon-linux-${{ matrix.arch }} > inframon-linux-${{ matrix.arch }}.sha256
+          echo "SHA256 checksum for inframon-linux-${{ matrix.arch }}:"
+          cat inframon-linux-${{ matrix.arch }}.sha256
+
+      - name: Upload binary and checksum as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: inframon-linux-${{ matrix.arch }}
+          path: |
+            inframon-linux-${{ matrix.arch }}
+            inframon-linux-${{ matrix.arch }}.sha256
+
+  stage-2a-validate-checksum:
+    needs: stage-1b-build-go-binary
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binary and checksum
+        uses: actions/download-artifact@v4
+        with:
+          name: inframon-linux-${{ matrix.arch }}
+
+      - name: Validate checksum
+        run: |
+          echo "Validating checksum for inframon-linux-${{ matrix.arch }}"
+          sha256sum -c inframon-linux-${{ matrix.arch }}.sha256
+
+  stage-2b-package-docker-image:
+    needs: stage-2a-validate-checksum
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set lowercase repository name
+        run: |
+          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "Repository name set to: ${{ env.GITHUB_REPOSITORY_LOWERCASE }}"
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: inframon-linux-${{ matrix.arch }}
+
+      - name: Build and push Docker image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_CR }}
+        run: |
+          echo $GITHUB_TOKEN | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker buildx build --platform linux/${{ matrix.arch }} \
+            -t ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }} \
+            --build-arg BINARY=inframon-linux-${{ matrix.arch }} \
+            --push .
+
+  stage-2c-security-scan:
+    needs: stage-2b-package-docker-image
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set lowercase repository name
+        run: |
+          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
+
+      - name: Run Trivy vulnerability scanner
+        run: |
+          mkdir -p scan_results
+          trivy image --exit-code 0 --severity HIGH,CRITICAL --format table \
+            --output scan_results/trivy-results-${{ matrix.arch }}.txt \
+            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+          echo "Vulnerabilities found for ${{ matrix.arch }}:"
+          cat scan_results/trivy-results-${{ matrix.arch }}.txt
+
+      - name: Generate SBOM
+        run: |
+          mkdir -p sbom_reports
+          trivy image --format json \
+            --output sbom_reports/sbom-${{ matrix.arch }}.json \
+            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-${{ matrix.arch }}
+
+      - name: Upload scan results and SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results-${{ matrix.arch }}
+          path: |
+            scan_results/trivy-results-${{ matrix.arch }}.txt
+            sbom_reports/sbom-${{ matrix.arch }}.json
+
+  stage-2d-create-multiarch-manifest:
+    needs: stage-2c-security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set lowercase repository name
+        run: |
+          echo "GITHUB_REPOSITORY_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_CR }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          docker manifest create ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev \
+            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-amd64 \
+            ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev-arm64
+
+          docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:dev
