@@ -22,7 +22,7 @@ go.work
 go.work.sum
 
 logs/
-config/
+config/config.yaml
 go.sum
 inframon
 logging/runtime.log
