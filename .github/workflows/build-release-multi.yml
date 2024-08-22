@@ -5,28 +5,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  check-branch:
-    runs-on: ubuntu-latest
-    outputs:
-      is-dev-branch: ${{ steps.check-branch.outputs.is-dev-branch }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check if push is from dev branch
-        id: check-branch
-        run: |
-          if [[ "${{ github.event.ref }}" == *"dev"* ]]; then
-            echo "is-dev-branch=true" >> $GITHUB_OUTPUT
-          else
-            echo "is-dev-branch=false" >> $GITHUB_OUTPUT
-          fi
-
   fetch-dev-artifacts:
-    needs: check-branch
-    if: needs.check-branch.outputs.is-dev-branch == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -42,8 +21,15 @@ jobs:
 
       - name: Download dev artifacts
         run: |
-          mkdir -p dev-artifacts
-          gh run download ${{ steps.get-dev-run.outputs.dev-run-id }} --dir dev-artifacts
+          if [ -n "${{ steps.get-dev-run.outputs.dev-run-id }}" ]; then
+            mkdir -p dev-artifacts
+            gh run download ${{ steps.get-dev-run.outputs.dev-run-id }} --dir dev-artifacts
+            echo "Dev artifacts downloaded successfully"
+          else
+            echo "No successful dev workflow run found. Skipping artifact download."
+            mkdir -p dev-artifacts
+            echo "This is a placeholder file" > dev-artifacts/placeholder.txt
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -291,8 +277,11 @@ jobs:
           docker manifest push ghcr.io/${{ env.GITHUB_REPOSITORY_LOWERCASE }}/inframon:latest
 
   create-release:
-    needs: create-multiarch-manifest
+    needs: [create-multiarch-manifest, security-scan]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -303,6 +292,8 @@ jobs:
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
 
       - name: Create Release
         id: create_release
@@ -315,15 +306,22 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            inframon-linux-amd64/inframon-linux-amd64
-            inframon-linux-amd64/inframon-linux-amd64.sha256
-            inframon-linux-arm64/inframon-linux-arm64
-            inframon-linux-arm64/inframon-linux-arm64.sha256
-            inframon-darwin-arm64/inframon-darwin-arm64
-            inframon-darwin-arm64/inframon-darwin-arm64.sha256
-            security-scan-results-amd64/trivy-results-amd64.txt
-            security-scan-results-amd64/sbom-amd64.json
-            security-scan-results-arm64/trivy-results-arm64.txt
-            security-scan-results-arm64/sbom-arm64.json
+            all-artifacts/inframon-linux-amd64/inframon-linux-amd64
+            all-artifacts/inframon-linux-amd64/inframon-linux-amd64.sha256
+            all-artifacts/inframon-linux-arm64/inframon-linux-arm64
+            all-artifacts/inframon-linux-arm64/inframon-linux-arm64.sha256
+            all-artifacts/inframon-darwin-arm64/inframon-darwin-arm64
+            all-artifacts/inframon-darwin-arm64/inframon-darwin-arm64.sha256
+            all-artifacts/security-scan-results-amd64/scan_results/trivy-results-amd64.txt
+            all-artifacts/security-scan-results-amd64/sbom_reports/sbom-amd64.json
+            all-artifacts/security-scan-results-arm64/scan_results/trivy-results-arm64.txt
+            all-artifacts/security-scan-results-arm64/sbom_reports/sbom-arm64.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check release creation
+        if: failure()
+        run: |
+          echo "Release creation failed. Please check your permissions and file paths."
+          echo "Available files in all-artifacts directory:"
+          ls -R all-artifacts
