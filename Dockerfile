@@ -1,4 +1,4 @@
-FROM golang:1.22.5-alpine AS builder
+FROM golang:1.22.7-alpine AS builder
 
 LABEL org.opencontainers.image.source=https://github.com/somememoryspace/inframon
 
