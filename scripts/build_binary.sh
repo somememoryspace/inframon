@@ -1,4 +1,4 @@
-#1/bin/bash
+#!/bin/bash
 
 cd ../
 go build -o inframon ./src

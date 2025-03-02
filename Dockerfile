@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o inframon ./src/ma
 
 FROM alpine:3.18
 
-RUN apk add --no-cache ca-certificates openssl
+RUN apk add --no-cache ca-certificates openssl tzdata
 
 WORKDIR /inframon
 
