@@ -1,4 +1,4 @@
-#1/bin/bash
+#!/bin/bash
 
 cd ../
 docker build -t inframon:latest .
