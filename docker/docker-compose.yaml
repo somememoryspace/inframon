@@ -6,10 +6,9 @@ services:
     image: ghcr.io/somememoryspace/inframon:dev
     environment:
       - CONFIG_PATH=/config/config.yaml
+      - TZ=America/New_York  # Replace with your desired timezone
     volumes:
       - ../config:/config
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro 
     network_mode: bridge
 
 ###version: '3.8'
