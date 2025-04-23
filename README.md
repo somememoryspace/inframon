@@ -1,7 +1,7 @@
 # Inframon
-Make Infrastructure Monitoring Easy Again. Simple easy monitoring service with no frills. Monitor services and just see exactly what you need to worry about. 
+Simple easy monitoring service with no frills. Monitor services and just see exactly what you need to worry about. 
 
-Consider the motto: _If the HealthCheck is Passing, Nothing to Worry About. Carry-On._
+Consider the motto: _If the HealthCheck is Passing, Nothing to Worry About._
 
 - **Platforms**: Kubernetes | LXC | Docker | Podman | Virtual Machine | Bare Metal |
 - **Supported** **Architectures**: Linux ARM64 AMD64 | macOS ARM64
