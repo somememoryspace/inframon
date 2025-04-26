@@ -24,7 +24,7 @@ COPY --from=builder /inframon/inframon .
 
 ENV CONFIG_PATH=/config/config.yaml
 
-RUN adduser -D -u 30000 linuxuser
+RUN adduser -D -u 1000 linuxuser
 
 RUN chown -R linuxuser:linuxuser /inframon && \
     chmod -R 755 /inframon
