@@ -388,12 +388,24 @@ func ParseConfig(pathToConfig string) *Config {
 	
 	if envSmtpHost != "" && envSmtpPort != "" && envSmtpUsername != "" && 
 	   envSmtpPassword != "" && envSmtpFrom != "" && envSmtpTo != "" {
-		config.Configuration.SmtpHost = envSmtpHost
-		config.Configuration.SmtpPort = envSmtpPort
-		config.Configuration.SmtpUsername = envSmtpUsername
-		config.Configuration.SmtpPassword = envSmtpPassword
-		config.Configuration.SmtpFrom = envSmtpFrom
-		config.Configuration.SmtpTo = envSmtpTo
+		
+		if err := validatePort(envSmtpPort); err != nil {
+			log.Printf("Warning: Invalid SMTP_PORT value, disabling SMTP: %v", err)
+			config.Configuration.SmtpDisable = true
+		} else if err := validateEmail(envSmtpFrom); err != nil {
+			log.Printf("Warning: Invalid SMTP_FROM value, disabling SMTP: %v", err)
+			config.Configuration.SmtpDisable = true
+		} else if err := validateEmail(envSmtpTo); err != nil {
+			log.Printf("Warning: Invalid SMTP_TO value, disabling SMTP: %v", err)
+			config.Configuration.SmtpDisable = true
+		} else {
+			config.Configuration.SmtpHost = envSmtpHost
+			config.Configuration.SmtpPort = envSmtpPort
+			config.Configuration.SmtpUsername = envSmtpUsername
+			config.Configuration.SmtpPassword = envSmtpPassword
+			config.Configuration.SmtpFrom = envSmtpFrom
+			config.Configuration.SmtpTo = envSmtpTo
+		}
 	} else {
 		config.Configuration.SmtpDisable = true
 		config.Configuration.SmtpHost = ""
