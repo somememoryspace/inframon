@@ -317,7 +317,13 @@ func sendNotificationSystem(message string, status string) {
 }
 
 func main() {
-	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "Starting Inframon", "INFO")
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("discordWebhookDisable :: [%v]", CONFIG.Configuration.DiscordWebHookDisable), "INFO")
+	envWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	if envWebhookURL != "" {
+		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: loaded from DISCORD_WEBHOOK_URL environment variable", "INFO")
+	} else {
+		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: DISCORD_WEBHOOK_URL environment variable not found, webhook auto-disabled", "INFO")
+	}
 
 	var wg sync.WaitGroup
 

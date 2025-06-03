@@ -370,6 +370,19 @@ func ParseConfig(pathToConfig string) *Config {
 	if err != nil {
 		panic(err)
 	}
+	
+	// Check for Discord webhook URL environment variable
+	envWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	if envWebhookURL != "" {
+		// Use environment variable value
+		config.Configuration.DiscordWebHookURL = envWebhookURL
+		// Keep the existing DiscordWebHookDisable setting from config file
+	} else {
+		// No environment variable found, force disable webhook
+		config.Configuration.DiscordWebHookDisable = true
+		config.Configuration.DiscordWebHookURL = ""
+	}
+	
 	return config
 }
 
@@ -473,10 +486,9 @@ func ValidateHTTPConfig(httpConfig []struct {
 }
 
 func ValidateConfiguration(config *Config) error {
-	if !config.Configuration.DiscordWebHookDisable && config.Configuration.DiscordWebHookURL == "" {
-		return fmt.Errorf("discordWebhookUrl cannot be empty when discordWebhookDisable is false")
-	}
-
+	// Note: Discord webhook URL validation is now handled in ParseConfig
+	// since the URL comes from environment variable and webhook is auto-disabled if not present
+	
 	if !config.Configuration.SmtpDisable {
 		smtpFields := map[string]string{
 			"smtpFrom":     config.Configuration.SmtpFrom,
