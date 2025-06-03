@@ -25,13 +25,6 @@ configuration:
     healthCronDisable: true    
     healthCronWebhookDisable: false
     healthCronSmtpDisable: false
-    discordWebhookUrl: "https://discord.com/api/webhooks/***********************************"
     smtpDisable: false
     logFileSize: "10MB"
     maxLogFileKeep: 5
-    smtpHost: "smtp.sendgrid.net"
-    smtpPort: "587"
-    smtpFrom: "donotreply@domain.net"
-    smtpUsername: "USERNAME"
-    smtpPassword: "PASSWORD"
-    smtpTo: "email@domain.net"
