@@ -122,12 +122,6 @@ configuration:
     smtpDisable: false
     logFileSize: "10MB"
     maxLogFileKeep: 5
-    smtpHost: "smtp.sendgrid.net"
-    smtpPort: "587"
-    smtpFrom: "donotreply@domain.net"
-    smtpUsername: "USERNAME"
-    smtpPassword: "PASSWORD"
-    smtpTo: "email@domain.net"
 
 ```
 
@@ -252,18 +246,46 @@ spec:
       labels:
         app: inframon
     spec:
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 10.10.200.1
+      nodeSelector:
+        node-role.kubernetes.io/worker: "true"
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
       - name: inframon
         image: ghcr.io/somememoryspace/inframon:latest
         imagePullPolicy: Always
-        args: ["--config", "/config/config.yaml"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: DISCORD_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: inframon-secrets
+              key: discord-webhook-url
         volumeMounts:
         - name: config
           mountPath: /config
+        - name: logs
+          mountPath: /var/log/inframon
       volumes:
       - name: config
         configMap:
           name: inframon-config
+      - name: logs
+        emptyDir: {}
 ```
 
 ### Apply the Deployment
