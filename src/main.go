@@ -95,8 +95,35 @@ func init() {
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("rootUserMode :: [%v]", *ROOTUSERARG), "INFO")
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("stdOut :: [%v]", CONFIG.Configuration.Stdout), "INFO")
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("healthCheckTimeout :: [%v]", CONFIG.Configuration.HealthCheckTimeout), "INFO")
+
+	// Enhanced Discord webhook logging
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("discordWebhookDisable :: [%v]", CONFIG.Configuration.DiscordWebHookDisable), "INFO")
+	
+	// Add Discord environment variable source logging
+	envWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	if envWebhookURL != "" {
+		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: loaded from DISCORD_WEBHOOK_URL environment variable", "INFO")
+	} else {
+		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: DISCORD_WEBHOOK_URL environment variable not found, webhook auto-disabled", "INFO")
+	}
+	
+	// Enhanced SMTP logging
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("smtpDisable :: [%v]", CONFIG.Configuration.SmtpDisable), "INFO")
+	
+	// Add SMTP environment variable source logging
+	envSmtpHost := os.Getenv("SMTP_HOST")
+	envSmtpPort := os.Getenv("SMTP_PORT")
+	envSmtpUsername := os.Getenv("SMTP_USERNAME")
+	envSmtpPassword := os.Getenv("SMTP_PASSWORD")
+	envSmtpFrom := os.Getenv("SMTP_FROM")
+	envSmtpTo := os.Getenv("SMTP_TO")
+	
+	if envSmtpHost != "" && envSmtpPort != "" && envSmtpUsername != "" && 
+	   envSmtpPassword != "" && envSmtpFrom != "" && envSmtpTo != "" {
+		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "smtpConfig :: loaded from SMTP_* environment variables", "INFO")
+	} else {
+		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "smtpConfig :: SMTP environment variables incomplete, SMTP auto-disabled", "INFO")
+	}
 }
 
 func setHealthStatus(m map[string]bool, key string, value bool) {
@@ -317,14 +344,7 @@ func sendNotificationSystem(message string, status string) {
 }
 
 func main() {
-	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("discordWebhookDisable :: [%v]", CONFIG.Configuration.DiscordWebHookDisable), "INFO")
-	envWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
-	if envWebhookURL != "" {
-		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: loaded from DISCORD_WEBHOOK_URL environment variable", "INFO")
-	} else {
-		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: DISCORD_WEBHOOK_URL environment variable not found, webhook auto-disabled", "INFO")
-	}
-
+	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "Starting Inframon", "INFO")
 	var wg sync.WaitGroup
 
 	for _, icmpConfig := range CONFIG.ICMP {

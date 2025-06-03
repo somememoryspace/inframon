@@ -371,16 +371,49 @@ func ParseConfig(pathToConfig string) *Config {
 		panic(err)
 	}
 	
-	// Check for Discord webhook URL environment variable
 	envWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
 	if envWebhookURL != "" {
-		// Use environment variable value
 		config.Configuration.DiscordWebHookURL = envWebhookURL
-		// Keep the existing DiscordWebHookDisable setting from config file
 	} else {
-		// No environment variable found, force disable webhook
 		config.Configuration.DiscordWebHookDisable = true
 		config.Configuration.DiscordWebHookURL = ""
+	}
+	
+	envSmtpHost := os.Getenv("SMTP_HOST")
+	envSmtpPort := os.Getenv("SMTP_PORT")
+	envSmtpUsername := os.Getenv("SMTP_USERNAME")
+	envSmtpPassword := os.Getenv("SMTP_PASSWORD")
+	envSmtpFrom := os.Getenv("SMTP_FROM")
+	envSmtpTo := os.Getenv("SMTP_TO")
+	
+	if envSmtpHost != "" && envSmtpPort != "" && envSmtpUsername != "" && 
+	   envSmtpPassword != "" && envSmtpFrom != "" && envSmtpTo != "" {
+		
+		if err := validatePort(envSmtpPort); err != nil {
+			log.Printf("Warning: Invalid SMTP_PORT value, disabling SMTP: %v", err)
+			config.Configuration.SmtpDisable = true
+		} else if err := validateEmail(envSmtpFrom); err != nil {
+			log.Printf("Warning: Invalid SMTP_FROM value, disabling SMTP: %v", err)
+			config.Configuration.SmtpDisable = true
+		} else if err := validateEmail(envSmtpTo); err != nil {
+			log.Printf("Warning: Invalid SMTP_TO value, disabling SMTP: %v", err)
+			config.Configuration.SmtpDisable = true
+		} else {
+			config.Configuration.SmtpHost = envSmtpHost
+			config.Configuration.SmtpPort = envSmtpPort
+			config.Configuration.SmtpUsername = envSmtpUsername
+			config.Configuration.SmtpPassword = envSmtpPassword
+			config.Configuration.SmtpFrom = envSmtpFrom
+			config.Configuration.SmtpTo = envSmtpTo
+		}
+	} else {
+		config.Configuration.SmtpDisable = true
+		config.Configuration.SmtpHost = ""
+		config.Configuration.SmtpPort = ""
+		config.Configuration.SmtpUsername = ""
+		config.Configuration.SmtpPassword = ""
+		config.Configuration.SmtpFrom = ""
+		config.Configuration.SmtpTo = ""
 	}
 	
 	return config
@@ -486,36 +519,6 @@ func ValidateHTTPConfig(httpConfig []struct {
 }
 
 func ValidateConfiguration(config *Config) error {
-	// Note: Discord webhook URL validation is now handled in ParseConfig
-	// since the URL comes from environment variable and webhook is auto-disabled if not present
-	
-	if !config.Configuration.SmtpDisable {
-		smtpFields := map[string]string{
-			"smtpFrom":     config.Configuration.SmtpFrom,
-			"smtpTo":       config.Configuration.SmtpTo,
-			"smtpHost":     config.Configuration.SmtpHost,
-			"smtpPort":     config.Configuration.SmtpPort,
-			"smtpUsername": config.Configuration.SmtpUsername,
-			"smtpPassword": config.Configuration.SmtpPassword,
-		}
-
-		for field, value := range smtpFields {
-			if value == "" {
-				return fmt.Errorf("%s cannot be empty when smtpDisable is false", field)
-			}
-		}
-
-		if err := validateEmail(config.Configuration.SmtpFrom); err != nil {
-			return fmt.Errorf("smtpFrom is invalid: %v", err)
-		}
-		if err := validateEmail(config.Configuration.SmtpTo); err != nil {
-			return fmt.Errorf("smtpTo is invalid: %v", err)
-		}
-		if err := validatePort(config.Configuration.SmtpPort); err != nil {
-			return fmt.Errorf("smtpPort is invalid: %v", err)
-		}
-	}
-
 	if !config.Configuration.Stdout {
 		if config.Configuration.LogFileSize == "" {
 			return fmt.Errorf("logFileSize cannot be empty when stdOut is false")
