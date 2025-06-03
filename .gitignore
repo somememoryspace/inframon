@@ -32,3 +32,5 @@ logging/runtime.log.3
 logging/runtime.log.4
 logging/runtime.log.5
 .DS_Store
+config/
+config/example-config.yaml
