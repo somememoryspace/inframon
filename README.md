@@ -72,6 +72,23 @@ For any security issues found, please open a Github Issue for review and provide
 |----------|----------|---------------------|
 | N/A | N/A | No Security Issues Found. |
 
+## Set Discord Webhook URL Variable:
+### Linux Shell
+```bash
+DISCORD_WEBHOOK_URL=YOUR_DISCORD_WEBOOK_URL
+```
+### Create Kubernetes Secret
+```bash
+kubectl create secret generic inframon-secrets \
+  --from-literal=discord-webhook-url="https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN" \
+  --from-literal=smtp-host="smtp.gmail.com" \
+  --from-literal=smtp-port="587" \
+  --from-literal=smtp-username="your-email@gmail.com" \
+  --from-literal=smtp-password="your-app-password" \
+  --from-literal=smtp-from="your-email@gmail.com" \
+  --from-literal=smtp-to="alerts@domain.net" --dry-run=client -o yaml >> secret.yaml
+```
+
 ## Define Configuration File
 Define a configuration file to load in ICMP or HTTP based monitors. Additionally, define instance specific configuration. 
 ```yaml
@@ -102,7 +119,6 @@ configuration:
     healthCronDisable: true    
     healthCronWebhookDisable: false
     healthCronSmtpDisable: false
-    discordWebhookUrl: "https://discord.com/api/webhooks/***********************************"
     smtpDisable: false
     logFileSize: "10MB"
     maxLogFileKeep: 5
@@ -194,7 +210,6 @@ data:
       stdout: true
       healthCheckTimeout: 300
       discordWebHookDisable: false
-      discordWebHookURL: "https://discord.com/api/webhooks/your-webhook-url"
       smtpDisable: true
     icmp:
       - address: "8.8.8.8"
