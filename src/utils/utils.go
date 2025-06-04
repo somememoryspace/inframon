@@ -371,40 +371,40 @@ func ParseConfig(pathToConfig string) *Config {
 		panic(err)
 	}
 	
-	envWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
-	if envWebhookURL != "" {
-		config.Configuration.DiscordWebHookURL = envWebhookURL
+	discordWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	if discordWebhookURL != "" {
+		config.Configuration.DiscordWebHookURL = discordWebhookURL
 	} else {
 		config.Configuration.DiscordWebHookDisable = true
 		config.Configuration.DiscordWebHookURL = ""
 	}
 	
-	envSmtpHost := os.Getenv("SMTP_HOST")
-	envSmtpPort := os.Getenv("SMTP_PORT")
-	envSmtpUsername := os.Getenv("SMTP_USERNAME")
-	envSmtpPassword := os.Getenv("SMTP_PASSWORD")
-	envSmtpFrom := os.Getenv("SMTP_FROM")
-	envSmtpTo := os.Getenv("SMTP_TO")
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+	smtpUsername := os.Getenv("SMTP_USERNAME")
+	smtpPassword := os.Getenv("SMTP_PASSWORD")
+	smtpFrom := os.Getenv("SMTP_FROM")
+	smtpTo := os.Getenv("SMTP_TO")
 	
-	if envSmtpHost != "" && envSmtpPort != "" && envSmtpUsername != "" && 
-	   envSmtpPassword != "" && envSmtpFrom != "" && envSmtpTo != "" {
+	if smtpHost != "" && smtpPort != "" && smtpUsername != "" && 
+	   smtpPassword != "" && smtpFrom != "" && smtpTo != "" {
 		
-		if err := validatePort(envSmtpPort); err != nil {
+		if err := validatePort(smtpPort); err != nil {
 			log.Printf("Warning: Invalid SMTP_PORT value, disabling SMTP: %v", err)
 			config.Configuration.SmtpDisable = true
-		} else if err := validateEmail(envSmtpFrom); err != nil {
+		} else if err := validateEmail(smtpFrom); err != nil {
 			log.Printf("Warning: Invalid SMTP_FROM value, disabling SMTP: %v", err)
 			config.Configuration.SmtpDisable = true
-		} else if err := validateEmail(envSmtpTo); err != nil {
+		} else if err := validateEmail(smtpTo); err != nil {
 			log.Printf("Warning: Invalid SMTP_TO value, disabling SMTP: %v", err)
 			config.Configuration.SmtpDisable = true
 		} else {
-			config.Configuration.SmtpHost = envSmtpHost
-			config.Configuration.SmtpPort = envSmtpPort
-			config.Configuration.SmtpUsername = envSmtpUsername
-			config.Configuration.SmtpPassword = envSmtpPassword
-			config.Configuration.SmtpFrom = envSmtpFrom
-			config.Configuration.SmtpTo = envSmtpTo
+			config.Configuration.SmtpHost = smtpHost
+			config.Configuration.SmtpPort = smtpPort
+			config.Configuration.SmtpUsername = smtpUsername
+			config.Configuration.SmtpPassword = smtpPassword
+			config.Configuration.SmtpFrom = smtpFrom
+			config.Configuration.SmtpTo = smtpTo
 		}
 	} else {
 		config.Configuration.SmtpDisable = true
