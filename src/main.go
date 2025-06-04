@@ -16,11 +16,16 @@ import (
 )
 
 var (
+	// Update the Version Number
+	VERSION			   string = "2.0.2"
+	// Update the Version Number
+
 	MUTEX              sync.Mutex
 	ROOTUSERARG        = flag.Bool("root_user", false, "True / False for enabling privileged mode. Default: False")
 	CONFIGARG          = flag.String("config", "", "path/to/file targeting inframon config.yaml file. Default: Nothing")
 	LOGPATHARG         = flag.String("logpath", "", "path/to/logfile targeting inframon log file. Default: Nothing")
 	LOGNAMEARG         = flag.String("logname", "", "file name for the log file. Default: Nothing")
+	VERSIONARG         = flag.Bool("version", false, "Get version information.")
 	CONFIG             *utils.Config
 	LOGGER             *utils.SafeLogger
 	ICMPHEALTH         = make(map[string]bool)
@@ -33,6 +38,12 @@ var (
 
 func init() {
 	flag.Parse()
+
+	if *VERSIONARG {
+		fmt.Printf("Version: %s\n", VERSION)
+		os.Exit(0)
+	}
+
 	if *CONFIGARG == "" {
 		log.Fatal("no configuration path provided")
 	}
@@ -96,30 +107,26 @@ func init() {
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("stdOut :: [%v]", CONFIG.Configuration.Stdout), "INFO")
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("healthCheckTimeout :: [%v]", CONFIG.Configuration.HealthCheckTimeout), "INFO")
 
-	// Enhanced Discord webhook logging
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("discordWebhookDisable :: [%v]", CONFIG.Configuration.DiscordWebHookDisable), "INFO")
 	
-	// Add Discord environment variable source logging
-	envWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
-	if envWebhookURL != "" {
+	discordWebhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	if discordWebhookURL != "" {
 		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: loaded from DISCORD_WEBHOOK_URL environment variable", "INFO")
 	} else {
 		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "discordWebhookURL :: DISCORD_WEBHOOK_URL environment variable not found, webhook auto-disabled", "INFO")
 	}
 	
-	// Enhanced SMTP logging
 	utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", fmt.Sprintf("smtpDisable :: [%v]", CONFIG.Configuration.SmtpDisable), "INFO")
 	
-	// Add SMTP environment variable source logging
-	envSmtpHost := os.Getenv("SMTP_HOST")
-	envSmtpPort := os.Getenv("SMTP_PORT")
-	envSmtpUsername := os.Getenv("SMTP_USERNAME")
-	envSmtpPassword := os.Getenv("SMTP_PASSWORD")
-	envSmtpFrom := os.Getenv("SMTP_FROM")
-	envSmtpTo := os.Getenv("SMTP_TO")
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+	smtpUsername := os.Getenv("SMTP_USERNAME")
+	smtpPassword := os.Getenv("SMTP_PASSWORD")
+	smtpFrom := os.Getenv("SMTP_FROM")
+	smtpTo := os.Getenv("SMTP_TO")
 	
-	if envSmtpHost != "" && envSmtpPort != "" && envSmtpUsername != "" && 
-	   envSmtpPassword != "" && envSmtpFrom != "" && envSmtpTo != "" {
+	if smtpHost != "" && smtpPort != "" && smtpUsername != "" && 
+	   smtpPassword != "" && smtpFrom != "" && smtpTo != "" {
 		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "smtpConfig :: loaded from SMTP_* environment variables", "INFO")
 	} else {
 		utils.ConsoleAndLoggerOutput(LOGGER, "STARTUP", "smtpConfig :: SMTP environment variables incomplete, SMTP auto-disabled", "INFO")
