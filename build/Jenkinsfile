@@ -1,0 +1,37 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: kubectl
+    image: harbor.ops.proxywerx.io/library/kubectl:latest
+    command: ['sh', '-c']
+    args: ['while true; do sleep 30; done']
+"""
+        }
+    }
+    stages {
+        stage('Deploy Build Job') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                        # Configure kubectl
+                        kubectl config set-cluster k8s --server=https://kubernetes.default.svc --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                        kubectl config set-credentials sa --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                        kubectl config set-context default --cluster=k8s --user=sa
+                        kubectl config use-context default
+                        
+                        # Run Job Scripts
+                        cd build/
+                        chmod +x build-script.sh
+                        sh build-script.sh
+                    '''
+                }
+            }
+        }
+    }
+}

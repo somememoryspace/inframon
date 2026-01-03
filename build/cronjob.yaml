@@ -1,0 +1,94 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: build-oci-inframon #Update
+  namespace: px-containers
+spec:
+  schedule: "0 9 1,7,14,21,28 * *" # Weekly 9AM on 1st, 7th, 21st, and 28th Days
+  timeZone: "America/New_York"
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          nodeSelector:
+            node-role.kubernetes.io/worker: "true"
+          restartPolicy: Never
+          volumes:
+            - name: build-context
+              emptyDir: {}
+            - name: buildkit-cache
+              emptyDir: {}
+            - name: harbor-credentials
+              secret:
+                secretName: harbor-credentials-json
+                items:
+                  - key: .dockerconfigjson
+                    path: config.json
+            - name: ssh-keys
+              secret:
+                secretName: ssh-keys
+                defaultMode: 0400
+                items:
+                  - key: id_rsa
+                    path: id_rsa
+          initContainers:
+            - name: prepare-workspace
+              image: harbor.ops.proxywerx.io/dockerhub/alpine/git:v2.49.1@sha256:58686456a7c75d09f51a31fba4a0eedd3dce8530e2c263a84c094f81583b6b09
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  mkdir -p /root/.ssh
+                  cp /ssh/id_rsa /root/.ssh/id_rsa
+                  chmod 600 /root/.ssh/id_rsa
+                  ssh-keyscan github.com >> /root/.ssh/known_hosts
+                  git clone --single-branch --branch main git@github.com:somememoryspace/inframon.git /workspace/inframon
+                  chmod -R 775 /workspace
+              volumeMounts:
+                - name: build-context
+                  mountPath: /workspace
+                - name: ssh-keys
+                  mountPath: /ssh
+          containers:
+            - name: buildkit
+              image: harbor.ops.proxywerx.io/dockerhub/moby/buildkit:master-rootless@sha256:82bc4c1340bb7c2621b0cfcee8ffe64df82693c8d64da6d766cab542925be3f9
+              env:
+                - name: BUILDKITD_FLAGS
+                  value: --oci-worker-no-process-sandbox
+              command:
+                - buildctl-daemonless.sh
+              args:
+                - build
+                - --frontend
+                - dockerfile.v0
+                - --local
+                - context=/workspace/inframon
+                - --local
+                - dockerfile=/workspace/inframon
+                - --export-cache
+                - type=registry,ref=harbor.ops.proxywerx.io/library/cache
+                - --import-cache
+                - type=registry,ref=harbor.ops.proxywerx.io/library/cache
+                - --output
+                - type=image,name=harbor.ops.proxywerx.io/library/inframon:latest-rootless,push=true
+              securityContext:
+                # Needs Kubernetes >= 1.19
+                seccompProfile:
+                  type: Unconfined
+                # Needs Kubernetes >= 1.30 (remove if using older Kubernetes)
+                appArmorProfile:
+                  type: Unconfined
+                # Buildkit rootless runs as user 1000
+                runAsUser: 1000
+                runAsGroup: 1000
+              volumeMounts:
+                - name: build-context
+                  mountPath: /workspace
+                - name: buildkit-cache
+                  mountPath: /home/user/.local/share/buildkit
+                - name: harbor-credentials
+                  mountPath: /home/user/.docker
