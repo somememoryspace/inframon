@@ -35,7 +35,7 @@ spec:
                     path: id_rsa
           initContainers:
             - name: prepare-workspace
-              image: harbor.ops.proxywerx.io/dockerhub/alpine/git:v2.49.1@sha256:58686456a7c75d09f51a31fba4a0eedd3dce8530e2c263a84c094f81583b6b09
+              image: harbor.dx.proxywerx.io/dockerhub/alpine/git:v2.49.1@sha256:58686456a7c75d09f51a31fba4a0eedd3dce8530e2c263a84c094f81583b6b09
               command:
                 - /bin/sh
                 - -c
@@ -53,7 +53,7 @@ spec:
                   mountPath: /ssh
           containers:
             - name: buildkit
-              image: harbor.ops.proxywerx.io/dockerhub/moby/buildkit:master-rootless@sha256:82bc4c1340bb7c2621b0cfcee8ffe64df82693c8d64da6d766cab542925be3f9
+              image: harbor.dx.proxywerx.io/dockerhub/moby/buildkit:master-rootless@sha256:82bc4c1340bb7c2621b0cfcee8ffe64df82693c8d64da6d766cab542925be3f9
               env:
                 - name: BUILDKITD_FLAGS
                   value: --oci-worker-no-process-sandbox
@@ -68,11 +68,11 @@ spec:
                 - --local
                 - dockerfile=/workspace/inframon
                 - --export-cache
-                - type=registry,ref=harbor.ops.proxywerx.io/library/cache
+                - type=registry,ref=harbor.dx.proxywerx.io/library/cache
                 - --import-cache
-                - type=registry,ref=harbor.ops.proxywerx.io/library/cache
+                - type=registry,ref=harbor.dx.proxywerx.io/library/cache
                 - --output
-                - type=image,name=harbor.ops.proxywerx.io/library/inframon:latest-rootless,push=true
+                - type=image,name=harbor.dx.proxywerx.io/library/inframon:latest-rootless,push=true
               securityContext:
                 # Needs Kubernetes >= 1.19
                 seccompProfile:
