@@ -14,8 +14,6 @@ spec:
       backoffLimit: 0
       template:
         spec:
-          nodeSelector:
-            node-role.kubernetes.io/worker: "true"
           restartPolicy: Never
           volumes:
             - name: build-context
