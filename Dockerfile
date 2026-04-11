@@ -12,7 +12,7 @@ RUN go mod download
 COPY src ./src
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o inframon ./src/main.go
 
-FROM alpine:3.18
+FROM docker.io/alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 
 RUN apk add --no-cache ca-certificates openssl tzdata
 
