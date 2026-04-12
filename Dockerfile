@@ -1,6 +1,9 @@
-FROM harbor.dx.proxywerx.io/dockerhub/golang:alpine3.23@sha256:c2a1f7b2095d046ae14b286b18413a05bb82c9bca9b25fe7ff5efef0f0826166 AS builder
+# Depends on Available px-containers base image: harbor.dx.proxywerx.io/library/go. Image is Pinned as of 04-2026. 
+FROM harbor.dx.proxywerx.io/library/go@sha256:270ace163469d345591f57e122c04269dc65ae6d9c356fa721339e2f6fe9c8fb AS builder
 
 LABEL org.opencontainers.image.source=https://github.com/somememoryspace/inframon
+
+USER root
 
 WORKDIR /inframon
 
@@ -12,7 +15,8 @@ RUN go mod download
 COPY src ./src
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o inframon ./src/main.go
 
-FROM docker.io/alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+# Depends on Available px-containers base image: harbor.dx.proxywerx.io/library/alpine-base. Image is Pinned as of 04-2026. 
+FROM harbor.dx.proxywerx.io/library/alpine-base@sha256:0aa0489151ac24640444f88d21252c7cf309a8b41a22f949180c06b9747ea56c
 
 RUN apk add --no-cache ca-certificates openssl tzdata
 
@@ -24,8 +28,6 @@ COPY --from=builder /inframon/inframon .
 
 ENV CONFIG_PATH=/config/config.yaml
 
-RUN adduser -D -u 1000 linuxuser
-
 RUN chown -R linuxuser:linuxuser /inframon && \
     chmod -R 755 /inframon
 
@@ -33,4 +35,4 @@ USER linuxuser
 
 STOPSIGNAL SIGTERM
 
-CMD ["/inframon/inframon", "--config=/config/config.yaml"]
+CMD ["/apps/inframon", "--config=/config/config.yaml"]
