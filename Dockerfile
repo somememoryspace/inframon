@@ -20,11 +20,11 @@ FROM harbor.dx.proxywerx.io/library/alpine-base@sha256:0aa0489151ac24640444f88d2
 
 RUN apk add --no-cache ca-certificates openssl tzdata
 
-WORKDIR /app
+WORKDIR /inframon
 
 RUN mkdir -p /app/inframon/logs
 
-COPY --from=builder /inframon/inframon .
+COPY --from=builder /inframon/inframon /app/inframon/inframon
 
 ENV CONFIG_PATH=/config/config.yaml
 
@@ -35,4 +35,4 @@ USER linuxuser
 
 STOPSIGNAL SIGTERM
 
-CMD ["/app/inframon", "--config=/config/config.yaml"]
+CMD ["/app/inframon/inframon", "--config=/config/config.yaml"]
