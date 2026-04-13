@@ -5,7 +5,7 @@ LABEL org.opencontainers.image.source=https://github.com/somememoryspace/inframo
 
 USER root
 
-WORKDIR /inframon
+WORKDIR /app
 
 RUN apk add --no-cache git
 
@@ -20,19 +20,19 @@ FROM harbor.dx.proxywerx.io/library/alpine-base@sha256:0aa0489151ac24640444f88d2
 
 RUN apk add --no-cache ca-certificates openssl tzdata
 
-WORKDIR /inframon
+WORKDIR /app
 
-RUN mkdir -p /inframon/logs
+RUN mkdir -p /app/inframon/logs
 
-COPY --from=builder /inframon/inframon .
+COPY --from=builder /app/inframon .
 
 ENV CONFIG_PATH=/config/config.yaml
 
-RUN chown -R linuxuser:linuxuser /inframon && \
-    chmod -R 755 /inframon
+RUN chown -R linuxuser:linuxuser /app/inframon && \
+    chmod -R 755 /app/inframon
 
 USER linuxuser
 
 STOPSIGNAL SIGTERM
 
-CMD ["/apps/inframon", "--config=/config/config.yaml"]
+CMD ["/app/inframon", "--config=/config/config.yaml"]
