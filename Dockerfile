@@ -5,7 +5,7 @@ LABEL org.opencontainers.image.source=https://github.com/somememoryspace/inframo
 
 USER root
 
-WORKDIR /app
+WORKDIR /inframon
 
 RUN apk add --no-cache git
 
@@ -24,7 +24,7 @@ WORKDIR /app
 
 RUN mkdir -p /app/inframon/logs
 
-COPY --from=builder /app/inframon .
+COPY --from=builder /inframon/inframon .
 
 ENV CONFIG_PATH=/config/config.yaml
 
