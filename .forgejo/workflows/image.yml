@@ -1,0 +1,33 @@
+# Builds harbor.dx.proxywerx.io/library/inframon on the platform kata runner
+# pool with the shared px-build-image (px-docs STD-WLD-05.R17; the script is
+# px-containers ci/build-image.sh, installed in the forgejo-runner image).
+#
+# Triggers (STD-WLD-05.R10, R11): every push to main, the weekly schedule
+# (09:00 America/New_York on days 1, 7, 14, 21, 28; rebuilds the commit of
+# the last push to main), and Actions -> image -> Run workflow on main.
+# Tags: latest-rootless, MM-DD-YYYY-rootless, and the 12-character commit.
+#
+# Credentials: none stored. The job logs in to Vault with its Forgejo OIDC
+# token (role ci-platform); this repository must be in the Vault grant
+# platform-harbor-push (px-tofu tofu/vault/terraform/locals.tf ci_grants).
+#
+# This directory also stops Forgejo from running .github/workflows (GitHub
+# only; their ubuntu-latest jobs would wait forever for a runner here).
+name: image
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "CRON_TZ=America/New_York 0 9 1,7,14,21,28 * *"
+  workflow_dispatch:
+
+jobs:
+  image:
+    runs-on: kata
+    enable-openid-connect: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push
+        run: px-build-image --name inframon
