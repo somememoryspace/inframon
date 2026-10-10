@@ -377,5 +377,13 @@ Run Inframon with the following command:
 $ inframon --config /path/to/config.yaml --logpath /path/to/logs --logname inframon.log [--root_user]
 ```
 
+## Secret scan
+`gitleaks` with `.gitleaks.toml` (default rules, narrow commented allowlists) runs in Forgejo Actions (`.forgejo/workflows/secret-scan.yaml`) on pull requests and pushes to `main`, with no secrets. Locally, `scripts/hooks/pre-commit` scans staged changes; it needs `gitleaks` on PATH (`brew install gitleaks`). Fix a false positive in `.gitleaks.toml` or `.gitleaksignore` with a reason, never with `--no-verify`; a real finding is rotated first, then removed.
+
+```bash
+git config core.hooksPath scripts/hooks   # once per clone
+gitleaks git . --log-opts=HEAD --redact   # whole history of the current branch
+```
+
 ## License
 This project is licensed under the Apache 2.0 License - see the LICENSE file for details.

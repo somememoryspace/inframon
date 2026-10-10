@@ -1,0 +1,25 @@
+#!/bin/sh
+# Secret scan of the staged changes with gitleaks and the repository's
+# .gitleaks.toml, the same configuration CI runs (.forgejo/workflows/secret-scan.yaml).
+#
+# Enable once per clone:   git config core.hooksPath scripts/hooks
+# Needs gitleaks on PATH:  brew install gitleaks (CI pins the version below)
+# Findings print redacted. A false positive is fixed in .gitleaks.toml or
+# .gitleaksignore with a reason, never with `git commit --no-verify`.
+set -eu
+
+GITLEAKS_VERSION=8.30.1
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not found; install gitleaks ${GITLEAKS_VERSION} or later (brew install gitleaks)" >&2
+  exit 1
+fi
+
+installed=$(gitleaks version 2>/dev/null | sed 's/^v//')
+if [ "$installed" != "$GITLEAKS_VERSION" ]; then
+  echo "pre-commit: gitleaks ${installed:-unknown} installed, CI uses ${GITLEAKS_VERSION}" >&2
+fi
+
+root=$(git rev-parse --show-toplevel)
+exec gitleaks git --pre-commit --staged --redact --no-banner --verbose \
+  --config "$root/.gitleaks.toml" "$root"

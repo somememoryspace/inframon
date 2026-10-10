@@ -1,0 +1,23 @@
+# Secret scan configuration (gitleaks v8.30.1).
+# Used by .forgejo/workflows/secret-scan.yaml (CI) and scripts/hooks/pre-commit
+# (local). Standards: px-docs STD-SEC-01.R1, STD-SEC-02.R7, STD-INF-04.R2.
+#
+# Rules: the gitleaks default ruleset, unchanged. Every allowlist below is
+# scoped to one rule or one exact value shape and says why. Do not add a path
+# allowlist that covers a directory or a file type. A historical finding triaged
+# as not a secret goes in .gitleaksignore by fingerprint, with a comment.
+
+title = "inframon"
+
+[extend]
+useDefault = true
+
+# Committed files use `{{ UPPER_SNAKE }}` for values that are filled in
+# elsewhere (px-docs agents/reference-agent-guardrails.md). Allow a captured
+# secret only when it is exactly one such placeholder, nothing else. The
+# default rules already skip most placeholders (braces and spaces fall outside
+# their secret character classes); this entry keeps that true for any rule.
+[[allowlists]]
+description = "Documented {{ UPPER_SNAKE }} placeholders"
+regexTarget = "secret"
+regexes = ['''^\{\{ ?[A-Z][A-Z0-9_]* ?\}\}$''']
