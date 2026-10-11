@@ -1,6 +1,6 @@
 # Secret scan configuration (gitleaks v8.30.1).
 # Used by .forgejo/workflows/secret-scan.yaml (CI) and scripts/hooks/pre-commit
-# (local). Standards: px-docs STD-SEC-01.R1, STD-SEC-02.R7, STD-INF-04.R2.
+# (local). Standards: px-docs STD-SEC-01.R1, STD-SEC-02.R15, STD-INF-04.R2.
 #
 # Rules: the gitleaks default ruleset, unchanged. Every allowlist below is
 # scoped to one rule or one exact value shape and says why. Do not add a path
